@@ -121,7 +121,9 @@ button { cursor: pointer; }
 .brand-logo {
   width: 38px; height: 38px; flex: none;
   object-fit: contain; border-radius: 9px;
+  background: rgba(255, 255, 255, .08);
 }
+.topbar.is-kompakt .brand-logo { width: 32px; height: 32px; }
 
 .brand-text { min-width: 0; }
 .brand h1 {

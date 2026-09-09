@@ -202,10 +202,22 @@ ab (`--marke-900` bis `--marke-100`). Um den Markenton zu ändern, genügt es,
 diese zu ersetzen — an keiner anderen Stelle steht eine Blauangabe fest im
 Code. Das Orange für TaM² steht darunter als `--tam-orange`.
 
-Für das Logo ist in `index.html` eine Stelle vorbereitet: die Datei als
-`logo.svg` neben `index.html` legen und die drei kommentierten Zeilen im
-Kopfbereich durch `<img src="./logo.svg" alt="FUGO Labs" class="brand-logo">`
-ersetzen. Die Größe passt sich automatisch ein.
+**Das Logo braucht keinen Eingriff in den Code.** Legen Sie eine Datei
+`logo.svg`, `logo.png` oder `logo.webp` neben `index.html` — die App findet sie
+beim Start und setzt sie ein. Liegt keine da, bleibt das neutrale
+Kalendersymbol stehen. Am besten eignet sich ein quadratisches Bild.
+
+Um aus der Doppelvorlage mit beiden App-Symbolen zwei einzelne Dateien zu
+machen:
+
+```bash
+python3 werkzeuge/logos-trennen.py vorlage.png
+# ergibt logo-fugo.png und logo-tam2.png
+```
+
+Das Werkzeug sucht die Kacheln anhand ihrer leuchtenden Ränder, schneidet sie
+frei und füllt sie quadratisch auf. Es funktioniert unabhängig von der Größe
+der Vorlage.
 
 ## Impressum
 

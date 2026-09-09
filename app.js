@@ -583,6 +583,32 @@ async function importBackup(file) {
   }
 }
 
+/**
+ * Logo einsetzen, wenn eines danebenliegt.
+ *
+ * Statt den Anwender ins HTML greifen zu lassen, sucht die App selbst nach
+ * einer Logodatei. Findet sie keine, bleibt das Kalendersymbol stehen --
+ * ein leerer Platz waere schlechter als ein neutrales Sinnbild.
+ */
+function ladeLogo() {
+  const bild = $("#brand-logo");
+  const ersatz = $("#brand-fallback");
+  const kandidaten = ["./logo.svg", "./logo.png", "./logo.webp"];
+
+  const versuche = (index) => {
+    if (index >= kandidaten.length) return;
+    const pruefung = new Image();
+    pruefung.onload = () => {
+      bild.src = kandidaten[index];
+      bild.hidden = false;
+      ersatz.hidden = true;
+    };
+    pruefung.onerror = () => versuche(index + 1);
+    pruefung.src = kandidaten[index];
+  };
+  versuche(0);
+}
+
 /* ------------------------------------------------------------ Erster Start */
 
 /**
@@ -775,6 +801,7 @@ function shiftMonth(value, delta) {
 store.load();
 bind();
 render();
+ladeLogo();
 maybeWelcome();
 
 /**
