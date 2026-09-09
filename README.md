@@ -203,8 +203,8 @@ diese zu ersetzen — an keiner anderen Stelle steht eine Blauangabe fest im
 Code. Das Orange für TaM² steht darunter als `--tam-orange`.
 
 **Das Logo braucht keinen Eingriff in den Code.** Legen Sie eine Datei
-`logo.svg`, `logo.png` oder `logo.webp` neben `index.html` — die App findet sie
-beim Start und setzt sie ein. Liegt keine da, bleibt das neutrale
+`logo.png` (oder `logo.svg`) neben `index.html` — die App findet sie beim
+Start und setzt sie ein. Liegt keine da, bleibt das neutrale
 Kalendersymbol stehen. Am besten eignet sich ein quadratisches Bild.
 
 Um aus der Doppelvorlage mit beiden App-Symbolen zwei einzelne Dateien zu

@@ -587,24 +587,38 @@ async function importBackup(file) {
  * Logo einsetzen, wenn eines danebenliegt.
  *
  * Statt den Anwender ins HTML greifen zu lassen, sucht die App selbst nach
- * einer Logodatei. Findet sie keine, bleibt das Kalendersymbol stehen --
- * ein leerer Platz waere schlechter als ein neutrales Sinnbild.
+ * einer Logodatei. Gesucht wird hoechstens einmal je Sitzung und nur nach
+ * zwei Namen -- jeder Fehlversuch ist eine vergebliche Anfrage an den Server
+ * und eine Fehlermeldung in der Browserkonsole. Findet sich nichts, bleibt
+ * das Kalendersymbol stehen; ein leerer Platz waere schlechter.
  */
+const LOGO_DATEIEN = ["./logo.png", "./logo.svg"];
+const LOGO_MERKER = "federsee.logo";
+
+function zeigeLogo(pfad) {
+  $("#brand-logo").src = pfad;
+  $("#brand-logo").hidden = false;
+  $("#brand-fallback").hidden = true;
+}
+
 function ladeLogo() {
-  const bild = $("#brand-logo");
-  const ersatz = $("#brand-fallback");
-  const kandidaten = ["./logo.svg", "./logo.png", "./logo.webp"];
+  let gemerkt = null;
+  try {
+    gemerkt = sessionStorage.getItem(LOGO_MERKER);
+  } catch {
+    // Speicher nicht verfügbar -- dann wird eben jedes Mal gesucht.
+  }
+  if (gemerkt === "keins") return;
+  if (gemerkt) { zeigeLogo(gemerkt); return; }
+
+  const merke = (wert) => { try { sessionStorage.setItem(LOGO_MERKER, wert); } catch {} };
 
   const versuche = (index) => {
-    if (index >= kandidaten.length) return;
+    if (index >= LOGO_DATEIEN.length) { merke("keins"); return; }
     const pruefung = new Image();
-    pruefung.onload = () => {
-      bild.src = kandidaten[index];
-      bild.hidden = false;
-      ersatz.hidden = true;
-    };
+    pruefung.onload = () => { zeigeLogo(LOGO_DATEIEN[index]); merke(LOGO_DATEIEN[index]); };
     pruefung.onerror = () => versuche(index + 1);
-    pruefung.src = kandidaten[index];
+    pruefung.src = LOGO_DATEIEN[index];
   };
   versuche(0);
 }
