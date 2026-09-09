@@ -54,6 +54,7 @@ Uhr „Guten Morgen“, bis 18:00 Uhr „Hallo“, danach „Guten Abend“.
 |---|---|
 | `store.js` | Datenhaltung und Speicherung auf dem Gerät |
 | `parser.js` | Aus erkanntem Text wird ein Tagesplan |
+| `deskew.js` | Blatt im Foto finden und geradeziehen |
 | `ocr.js` | Fotos und PDF-Dateien werden zu Text |
 | `ics.js` | Kalenderdatei für Apple, Google und Outlook |
 | `app.js` | Oberfläche und Ablauf |
@@ -86,10 +87,32 @@ Zeilen zu Anreise, Abreise und Druckdatum.
 Zusätzlich wird geprüft, ob der genannte Wochentag zum Datum passt. Tut er das
 nicht, erscheint ein Hinweis in der Prüfansicht statt eines stillen Fehlers.
 
+### Schiefe Aufnahmen werden geradegezogen
+
+Ein Handyfoto zeigt das Blatt fast nie rechtwinklig. Für die Texterkennung ist
+das der größte Störfaktor: Die Spalten rutschen gegeneinander, und die
+Behandlerspalte landet in der Zeile darunter.
+
+`deskew.js` sucht deshalb das Blatt im Bild – hell auf dunklerem Grund,
+Schwellwert nach Otsu, größte zusammenhängende Fläche – bestimmt seine vier
+Ecken und rechnet es perspektivisch auf ein Rechteck zurück.
+
+Zwei Dinge sind dabei wichtig:
+
+- **Im Zweifel wird nicht entzerrt.** Findet sich keine plausible Blattkontur
+  (mindestens ein Viertel des Bildes, gegenüberliegende Kanten ähnlich lang,
+  keine zusammenfallenden Ecken), bleibt das Bild unverändert. Ein falsch
+  entzerrtes Bild wäre schlechter als ein schiefes.
+- **Nur wenn es nötig ist.** Jede Umrechnung tastet das Bild neu ab und kostet
+  etwas Schärfe. Bei leicht schiefen Aufnahmen schadet das mehr, als es nützt,
+  weil die Zeilenzusammenführung solche Fälle ohnehin auffängt. Gemessen an
+  Testaufnahmen: rund 5 Grad Kippung ergeben einen Verzerrungswert von 0,076,
+  rund 11 Grad einen von 0,155. Die Schwelle liegt bei 0,12.
+
 ### Warum die Spaltenposition zählt – und wann nicht
 
 Hat ein Plan eine Spaltenüberschrift („Zeit | Haus | Behandlungsstelle |
-Heilmittel | Behandler“), ist die Position das verlässlichste Signal, das er
+Heilmittel | Behandler"), ist die Position das verlässlichste Signal, das er
 hergibt: Die Klinik druckt jeden Tag dieselbe Tabelle. Die Überschriften
 liefern die Spaltenanker, und jede Zelle wird der Spalte zugeordnet, deren
 Bereich ihre linke Kante trifft.
@@ -101,17 +124,27 @@ wie in der Vorgängerversion – alle Spalten verschiebt.
 
 Zwei weitere Eigenheiten echter Pläne sind berücksichtigt:
 
-- **Umbrüche innerhalb einer Zelle** („Haus am“ / „Gsundbrunnen“) gehören zu
+- **Umbrüche innerhalb einer Zelle** („Haus am" / „Gsundbrunnen") gehören zu
   ihrer eigenen Spalte, nicht an die Anwendung. Unterschieden werden sie am
   Zeilenabstand: Ein Umbruch klebt mit rund 0,3 Zeilenhöhen an der Zeile
   darüber, eine neue Tabellenzeile hat ab 0,65 deutlich mehr Abstand.
 - **Hinweistexte** zwischen den Terminen („In der Zeit von 7 - 9 Uhr ist der
-  Raum geöffnet“, „Öffnungszeiten der Therme: Mo - So 10 -22 Uhr“) enthalten
-  selbst Uhrzeiten. Sie werden erkannt und übersprungen, damit daraus keine
-  Phantomtermine entstehen.
+  Raum geöffnet") enthalten selbst Uhrzeiten. Sie werden erkannt und
+  übersprungen, damit daraus keine Phantomtermine entstehen.
 
-Zeilen ohne Uhrzeit („Eigentraining Therme“) werden nicht übernommen. Die
+Zeilen ohne Uhrzeit („Eigentraining Therme") werden nicht übernommen. Die
 Prüfansicht nennt ihre Anzahl, damit nichts unbemerkt verloren geht.
+
+### Kein geratenes Datum
+
+Auf Klinikplänen steht im Seitenkopf das Anreise- und Druckdatum, nicht der
+Tag der Termine. Das richtige Datum steht im Tabellenkörper
+(„Freitag 11. September 2026"), und daran werden die Tage getrennt.
+
+Steht im Kopfbereich überhaupt eines der Wörter Anreise, Abreise oder
+gedruckt, wird von dort **kein** Datum mehr übernommen – dann bleibt das Feld
+leer und die Prüfansicht fordert zur Eingabe auf. Ein leeres Datumsfeld fällt
+beim Prüfen auf, ein falsches nicht.
 
 ### Wie falsch gelesene Namen korrigiert werden
 

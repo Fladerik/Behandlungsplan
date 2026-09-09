@@ -412,10 +412,13 @@ function renderReview() {
 }
 
 function reviewRow(item, dayIndex, itemIndex) {
-  const flagged = item.corrections?.length || (item.confidence && item.confidence < 70);
-  const flag = item.corrections?.length
-    ? `<span class="flag">automatisch korrigiert: ${escapeHTML(item.corrections.join(", "))}</span>`
-    : item.confidence && item.confidence < 70 ? `<span class="flag">unsicher erkannt – bitte prüfen</span>` : "";
+  const fehltTitel = !item.title.trim();
+  const flagged = fehltTitel || item.corrections?.length || (item.confidence && item.confidence < 70);
+  const flag = fehltTitel
+    ? `<span class="flag">Anwendung nicht erkannt – bitte eintragen</span>`
+    : item.corrections?.length
+      ? `<span class="flag">automatisch korrigiert: ${escapeHTML(item.corrections.join(", "))}</span>`
+      : item.confidence && item.confidence < 70 ? `<span class="flag">unsicher erkannt – bitte prüfen</span>` : "";
 
   return `
     <div class="review-row ${flagged ? "is-flagged" : ""}" data-row="${dayIndex}:${itemIndex}">

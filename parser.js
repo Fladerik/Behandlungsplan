@@ -580,7 +580,8 @@ export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date
 
   if (!lines.length) {
     const items = fromPlainText(fullText || "", lexicon);
-    const date = headerDate(fullText || "", fallbackYear);
+    const textLines = String(fullText || "").split(/\r?\n/).map((text) => ({ text }));
+    const date = headerDate(textLines, fullText, fallbackYear);
     return { days: items.length ? [{ date, items }] : [], warnings, confidence: 0, skipped: 0 };
   }
 
@@ -599,8 +600,10 @@ export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date
     // Kein Tagesabschnitt im Tabellenkoerper: die ganze Seite gilt als ein Tag,
     // dessen Datum aus dem Seitenkopf stammt. Gewarnt wird nur, wenn auch dort
     // keines steht -- nicht schon, weil die Datumszeile fehlt.
-    const date = headerDate(fullText || lines.map((line) => line.text).join("\n"), fallbackYear);
-    if (!date) warnings.push("Auf dieser Seite wurde kein Datum gefunden. Bitte oben eintragen.");
+    const date = headerDate(lines, fullText, fallbackYear);
+    if (!date) {
+      warnings.push("Für diesen Plan wurde kein Tagesdatum gefunden – auf der Seite steht nur ein Anreise- oder Druckdatum. Bitte das Datum oben selbst eintragen.");
+    }
     else if (dateMatchesWeekday(date, fullText || "") === false) {
       warnings.push("Datum und Wochentag auf dem Plan passen nicht zusammen. Bitte prüfen.");
     }
@@ -636,15 +639,38 @@ export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date
   };
 }
 
+/** Woerter, neben denen ein Datum nie der Tag der Termine ist. */
+const FREMDES_DATUM = /(anreise|abreise|zuletzt gedruckt|gedruckt am|geburt|aufnahme|entlassung|ausstellung|stand vom)/i;
+
 /**
- * Das Datum im Seitenkopf ist die letzte Wahl: dort stehen Anreise, Abreise
- * und der Druckzeitpunkt, aber nicht der Tag der Termine.
+ * Datum aus dem Seitenkopf -- die letzte Wahl.
+ *
+ * Auf Klinikplaenen stehen dort Anreise, Abreise und Druckzeitpunkt, aber
+ * nicht der Tag der Termine. Frueher wurde dafuer die rohe Textausgabe
+ * zeilenweise gefiltert; bei einem schiefen Foto trennt die Texterkennung
+ * "Anreise:" und das Datum jedoch in verschiedene Zeilen, der Filter lief
+ * ins Leere und das Anreisedatum landete auf allen Terminen.
+ *
+ * Jetzt gilt: Steht im Kopfbereich ueberhaupt eines dieser Woerter, ist jedes
+ * Datum dort verdaechtig -- dann wird lieber keines geraten. Ein leeres
+ * Datumsfeld faellt in der Pruefung auf, ein falsches nicht.
  */
-function headerDate(text, fallbackYear) {
-  const usable = String(text).split(/\r?\n/)
-    .filter((line) => !/(anreise|abreise|zuletzt gedruckt|geburt|aufnahme)/i.test(line))
-    .join("\n");
-  return parseGermanDate(usable, fallbackYear) || "";
+function headerDate(lines, fullText, fallbackYear) {
+  // Auf den zusammengefuehrten Zeilen arbeiten: die kennen die raeumliche
+  // Nachbarschaft und halten "Anreise: 02.09.2026" zusammen.
+  const kandidaten = [];
+  for (const line of lines) {
+    const text = clean(line.text);
+    if (FREMDES_DATUM.test(text)) continue;
+    const datum = parseGermanDate(text, fallbackYear);
+    if (datum) kandidaten.push({ datum, text });
+  }
+  if (kandidaten.length) return kandidaten[0].datum;
+
+  // Keine unverdaechtige Zeile gefunden. Enthaelt die Seite ueberhaupt ein
+  // Anreise- oder Druckdatum, wird nicht geraten.
+  if (lines.some((line) => FREMDES_DATUM.test(line.text))) return "";
+  return parseGermanDate(fullText || "", fallbackYear) || "";
 }
 
 /** Zerlegt die Seite an den Datumszeilen in Tagesabschnitte. */
@@ -776,7 +802,7 @@ function fromPlainText(text, lexicon) {
       id: newId(),
       time,
       duration: match[2] ? minutesBetween(time, normalizeTime(match[2])) : 30,
-      title: title.value || "Behandlung",
+      title: title.value,
       location: assigned.location,
       practitioner: assigned.practitioner,
       note: assigned.note,

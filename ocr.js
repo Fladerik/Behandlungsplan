@@ -5,6 +5,8 @@
  * pdf.js für PDF-Dateien. Es verlässt keine Datei das Gerät.
  */
 
+import { entzerre } from "./deskew.js";
+
 const TESS_OPTIONS = {
   workerPath: "./vendor/worker.min.js",
   corePath: "./vendor/",
@@ -76,8 +78,8 @@ export async function releaseWorker() {
  * Größe, Graustufen und eine sanfte Kontrastspreizung bringen den größten
  * Gewinn -- härteres Schwellwertverfahren frisst dünne Buchstaben weg.
  */
-function enhance(source, width, height) {
-  const target = Math.min(2600, Math.max(1600, width));
+function enhance(source, width, height, bereitsSkaliert = false) {
+  const target = bereitsSkaliert ? width : Math.min(2600, Math.max(1600, width));
   const scale = target / width;
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(width * scale);
@@ -160,6 +162,8 @@ async function pdfTasks(file) {
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+        // PDF-Seiten sind bereits rechtwinklig; eine Entzerrung waere hier
+        // nur ein zusaetzlicher Abtastschritt und wuerde Schaerfe kosten.
         const enhanced = enhance(canvas, canvas.width, canvas.height);
         release(canvas);
         return { kind: "canvas", canvas: enhanced };
@@ -214,7 +218,18 @@ export async function readFiles(files, onProgress) {
         name: file.name,
         async load() {
           const image = await loadImage(file);
-          return { kind: "canvas", canvas: enhance(image, image.naturalWidth, image.naturalHeight) };
+          // Zuerst das Blatt geradeziehen: eine schiefe Aufnahme laesst die
+          // Tabellenspalten gegeneinander verrutschen, und daran scheitert
+          // jede weitere Auswertung.
+          const gerade = entzerre(image, image.naturalWidth, image.naturalHeight);
+          const quelle = gerade.canvas || image;
+          const breite = gerade.canvas ? gerade.canvas.width : image.naturalWidth;
+          const hoehe = gerade.canvas ? gerade.canvas.height : image.naturalHeight;
+          // Ein entzerrtes Bild hat bereits die richtige Groesse; enhance
+          // wuerde es sonst ein zweites Mal abtasten.
+          const fertig = enhance(quelle, breite, hoehe, gerade.entzerrt);
+          if (gerade.canvas) release(gerade.canvas);
+          return { kind: "canvas", canvas: fertig, entzerrt: gerade.entzerrt };
         },
       });
     }
@@ -230,6 +245,7 @@ export async function readFiles(files, onProgress) {
 
     report(`Seite ${index + 1} von ${tasks.length} wird aufbereitet …`, base + share * 0.15);
     const page = await task.load();
+    if (page.entzerrt) report(`Seite ${index + 1}: Blatt erkannt und geradegezogen.`, base + share * 0.25);
 
     if (page.kind === "text") {
       result.push({ text: page.text, tsv: "", name: task.name });
@@ -241,7 +257,7 @@ export async function readFiles(files, onProgress) {
     report(`Seite ${index + 1} von ${tasks.length} wird gelesen …`, base + share * 0.35);
     try {
       const { data } = await worker.recognize(page.canvas, {}, { text: true, tsv: true });
-      result.push({ text: data.text || "", tsv: data.tsv || "", name: task.name });
+      result.push({ text: data.text || "", tsv: data.tsv || "", name: task.name, entzerrt: Boolean(page.entzerrt) });
     } finally {
       release(page.canvas);
     }
