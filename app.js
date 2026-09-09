@@ -320,6 +320,7 @@ async function handleFiles(files) {
       $("#review-body").innerHTML = `<div class="notice">Auf den gewählten Dateien wurden keine Termine gefunden.
         Häufige Ursachen: zu dunkles Foto, starke Schräglage oder ein sehr kleiner Ausschnitt.
         Am besten das Blatt flach hinlegen, von oben fotografieren und den ganzen Plan erfassen.
+        Ein neuer Versuch kostet nichts – es geht nichts verloren.
         ${warnings.length ? `<ul>${warnings.map((text) => `<li>${escapeHTML(text)}</li>`).join("")}</ul>` : ""}</div>`;
       return;
     }
@@ -363,7 +364,13 @@ function renderReview() {
          <ul>${ui.reviewWarnings.map((text) => `<li>${escapeHTML(text)}</li>`).join("")}</ul></div>`
     : "";
 
-  $("#review-body").innerHTML = globalWarnings + ui.review.map((day, dayIndex) => {
+  // Der wichtigste Satz für die Nutzer: Ein Fehler kostet nichts. Genau das
+  // nimmt die Scheu, überhaupt zu fotografieren.
+  const reassurance = `<p class="retry-note">Etwas falsch erkannt? Sie können jeden Tag
+    beliebig oft neu fotografieren – der neue Plan ersetzt den alten. Am besten das Blatt
+    flach hinlegen und gerade von oben aufnehmen.</p>`;
+
+  $("#review-body").innerHTML = globalWarnings + reassurance + ui.review.map((day, dayIndex) => {
     const heading = day.date ? escapeHTML(fmtDay.format(dateOf(day.date))) : "Tag ohne erkanntes Datum";
 
     const conflict = day.existingCount

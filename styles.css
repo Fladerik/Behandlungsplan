@@ -340,6 +340,10 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
 .progress-track div { height: 100%; width: 2%; background: var(--teal-600); transition: width .25s ease; }
 .progress p { margin: 8px 0 0; font-size: 13.5px; color: var(--ink-soft); }
 
+.retry-note {
+  margin: 0 0 16px; padding: 11px 13px; font-size: 13.5px; line-height: 1.5;
+  color: var(--ink-soft); background: var(--teal-100); border-radius: 11px;
+}
 .review-page { display: grid; gap: 12px; margin-bottom: 22px; }
 .review-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .review-head .field { flex: none; }

@@ -589,7 +589,7 @@ export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date
   // falsche Termine zu speichern.
   const tilt = tiltDegrees(tsv);
   if (tilt > 4) {
-    warnings.push(`Das Foto ist um etwa ${Math.round(tilt)} Grad geneigt. Bitte das Blatt flach hinlegen und von oben fotografieren – sonst können Spalten vertauscht werden.`);
+    warnings.push(`Das Foto ist um etwa ${Math.round(tilt)} Grad geneigt – dabei können Spalten vertauscht werden. Prüfen Sie die Zeilen unten, oder fotografieren Sie den Plan flach liegend noch einmal; die neue Aufnahme ersetzt diesen Tag.`);
   }
 
   const columns = findColumns(lines);
@@ -621,7 +621,7 @@ export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date
     // Zeilenzuordnung gelitten -- ein verlässliches Warnsignal.
     const times = day.items.map((item) => item.time);
     if (times.some((time, index) => index > 0 && time < times[index - 1])) {
-      warnings.push("Die Uhrzeiten stehen nicht in der richtigen Reihenfolge. Bitte diesen Tag besonders sorgfältig prüfen.");
+      warnings.push("Die Uhrzeiten stehen nicht in der richtigen Reihenfolge – ein Zeichen, dass die Aufnahme schief war. Bitte diesen Tag sorgfältig prüfen oder das Blatt flach liegend noch einmal fotografieren.");
     }
   }
   for (const day of days) {
