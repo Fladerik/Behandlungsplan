@@ -7,8 +7,16 @@ Datenübertragung.
 
 ## Hochladen auf Strato
 
-Den kompletten Ordnerinhalt per FTP in das Webverzeichnis kopieren
-(z. B. `/terminplan/`). Es ist keine Datenbank und kein PHP nötig.
+Die App ist für eine öffentliche Adresse gedacht, die alle Patientinnen und
+Patienten aufrufen – etwa per QR-Code:
+
+```
+https://www.cameraorganizer.com/federsee/
+```
+
+Den kompletten Ordnerinhalt per FTP in dieses Verzeichnis kopieren. Es ist
+keine Datenbank, kein PHP und kein Benutzerkonto nötig. Alle Pfade im Code sind
+relativ, das Unterverzeichnis funktioniert daher ohne Anpassung.
 
 ```
 index.html  styles.css  app.js  store.js  parser.js  ocr.js  ics.js
@@ -28,6 +36,17 @@ Zwei Voraussetzungen:
 Nach einer Aktualisierung genügt es, die geänderten Dateien zu überschreiben.
 Der Service Worker holt den Programmcode zuerst aus dem Netz, neue Versionen
 kommen also ohne Zutun der Nutzer an.
+
+### Wie die App für die Patienten funktioniert
+
+Jede Person ruft dieselbe Adresse auf und arbeitet vollständig unabhängig:
+kein Login, kein Serverkonto, keine gemeinsame Datenbank. Fotos und Termine
+werden auf dem eigenen Gerät verarbeitet und dort gespeichert; sie überstehen
+das Schließen des Tabs und des Browsers.
+
+Beim ersten Start werden nur ein frei wählbarer Anzeigename erfragt und der
+Datenschutzhinweis gezeigt. Danach begrüßt die App nach Tageszeit – bis 11:00
+Uhr „Guten Morgen“, bis 18:00 Uhr „Hallo“, danach „Guten Abend“.
 
 ## Wie die App aufgebaut ist
 

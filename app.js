@@ -28,6 +28,14 @@ const ui = {
 
 const categoryColor = (id) => CATEGORIES.find((entry) => entry.id === id)?.color || "#5a6470";
 
+/** Wortlaut an einer Stelle -- er erscheint beim ersten Start und im Menü. */
+const PRIVACY_TEXT = `<strong>Ihre Daten bleiben auf diesem Gerät.</strong> Behandlungspläne und
+  Termine werden direkt in Ihrem Browser verarbeitet und lokal auf diesem Gerät gespeichert.
+  Es erfolgt keine automatische Übertragung an die Website oder an Dritte.<br><br>
+  <strong>Wichtig:</strong> Wenn Sie Browserdaten, Websitedaten oder Cookies für diese Webseite
+  löschen, können die lokal gespeicherten Termine entfernt werden. Sichern Sie Ihre Daten bei
+  Bedarf vorher oder exportieren Sie sie in Ihren Kalender.`;
+
 /* ------------------------------------------------------------ Formatierung */
 
 const fmtDay = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -71,7 +79,27 @@ function toast(message, ms = 3200) {
 
 /* -------------------------------------------------------------- Rendering */
 
+/**
+ * Begrüßung nach Tageszeit. Ohne hinterlegten Namen bleibt der Titel stehen --
+ * ein "Guten Morgen," ohne Anrede wirkt unfertig.
+ */
+function renderGreeting() {
+  const name = store.getState().profile.name;
+  const element = $("#greeting");
+  if (!name) {
+    element.textContent = "Federsee Terminplan";
+    return;
+  }
+  // Grenzen wie vorgegeben, in Minuten gerechnet: bis 11:00 einschließlich
+  // „Guten Morgen“, ab 11:01 bis 18:00 „Hallo“, danach „Guten Abend“.
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const gruss = minutes <= 11 * 60 ? "Guten Morgen" : minutes <= 18 * 60 ? "Hallo" : "Guten Abend";
+  element.textContent = `${gruss}, ${name}`;
+}
+
 function render() {
+  renderGreeting();
   renderNextUp();
   renderDayStrip();
   renderFilter();
@@ -470,6 +498,7 @@ function submitItem(event) {
 
 function openMenu() {
   const state = store.getState();
+  $("#privacy-text").innerHTML = PRIVACY_TEXT;
   $("#profile-name").value = state.profile.name || "";
   $("#reminder").value = String(state.settings.reminder ?? 15);
   const days = store.allDays();
@@ -503,6 +532,33 @@ async function importBackup(file) {
   } catch (error) {
     toast(`Die Datei konnte nicht gelesen werden: ${error.message}`);
   }
+}
+
+/* ------------------------------------------------------------ Erster Start */
+
+/**
+ * Beim ersten Öffnen werden der Anzeigename erfragt und der Datenschutzhinweis
+ * gezeigt. Beides steht danach im Menü unter „Einstellungen & Daten“.
+ */
+function maybeWelcome() {
+  const profile = store.getState().profile;
+  if (profile.privacyAcceptedAt) return;
+
+  $("#welcome-privacy").innerHTML = PRIVACY_TEXT;
+  const dialog = $("#welcome-dialog");
+  const input = $("#welcome-name");
+
+  const finish = () => {
+    store.setProfile({ name: input.value.trim(), privacyAcceptedAt: Date.now() });
+    store.flush();
+    dialog.close();
+    renderGreeting();
+  };
+
+  $("#welcome-start").addEventListener("click", finish);
+  input.addEventListener("keydown", (event) => { if (event.key === "Enter") finish(); });
+  dialog.showModal();
+  setTimeout(() => input.focus(), 120);
 }
 
 /* ------------------------------------------------------------ Ereignisse */
@@ -612,7 +668,10 @@ function bind() {
     toast("Termin gelöscht.");
   });
 
-  $("#profile-name").addEventListener("change", (event) => store.setProfile({ name: event.target.value.trim() }));
+  $("#profile-name").addEventListener("change", (event) => {
+    store.setProfile({ name: event.target.value.trim() });
+    renderGreeting();
+  });
   $("#reminder").addEventListener("change", (event) => store.setSetting("reminder", Number(event.target.value)));
   $("#export-ics").addEventListener("click", exportCalendar);
   $("#export-backup").addEventListener("click", exportBackup);
@@ -625,6 +684,7 @@ function bind() {
     render();
     $("#menu-dialog").close();
     toast("Alle Daten wurden gelöscht.");
+    maybeWelcome();
   });
 
   $$("[data-close]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
@@ -653,6 +713,7 @@ function shiftMonth(value, delta) {
 store.load();
 bind();
 render();
+maybeWelcome();
 
 // Der Tageswechsel um Mitternacht soll die Ansicht ohne Neuladen mitnehmen.
 let lastDay = store.todayISO();

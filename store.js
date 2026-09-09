@@ -11,21 +11,20 @@
  * Browser.
  */
 
-const KEY = "federsee.plan.v2";
-const LEGACY_KEYS = ["federsee.plan.v1", "federseePlan", "behandlungsplan"];
+const KEY = "federsee.plan.v3";
+const LEGACY_KEYS = ["federsee.plan.v2", "federsee.plan.v1", "federseePlan", "behandlungsplan"];
 
 export const CATEGORIES = [
-  { id: "bewegung", label: "Bewegung & Bad", color: "#0f7a86" },
-  { id: "massage", label: "Massage & Packung", color: "#8a5a2b" },
-  { id: "medizin", label: "Arzt & Diagnostik", color: "#a8323f" },
-  { id: "beratung", label: "Beratung & Vortrag", color: "#4a5aa8" },
-  { id: "essen", label: "Mahlzeiten", color: "#6b7a2f" },
+  { id: "therapie", label: "Therapie", color: "#0f7a86" },
+  { id: "training", label: "Training", color: "#4a7a2f" },
+  { id: "mahlzeit", label: "Mahlzeit", color: "#8a5a2b" },
+  { id: "info", label: "Info/Vortrag", color: "#4a5aa8" },
   { id: "sonstiges", label: "Sonstiges", color: "#5a6470" },
 ];
 
 const emptyState = () => ({
-  version: 2,
-  profile: { name: "", clinic: "" },
+  version: 3,
+  profile: { name: "", greetedAt: null, privacyAcceptedAt: null },
   days: {},
   lexicon: { title: {}, practitioner: {}, location: {} },
   settings: { reminder: 15, keepArchiveDays: 400 },

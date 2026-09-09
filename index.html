@@ -20,7 +20,7 @@
         <svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8.5" cy="14.5" r="1.3" fill="currentColor"/><circle cx="12" cy="14.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="14.5" r="1.3" fill="currentColor"/></svg>
       </span>
       <div>
-        <h1>Federsee Terminplan</h1>
+        <h1 id="greeting">Federsee Terminplan</h1>
         <p id="brand-sub">Dein persönlicher Therapie- und Tagesplan</p>
       </div>
     </div>
@@ -133,6 +133,11 @@
       <input id="backup-input" type="file" accept="application/json,.json" hidden>
     </div>
 
+    <div class="menu-group">
+      <h3>Datenschutz &amp; Daten</h3>
+      <p class="hint" id="privacy-text"></p>
+    </div>
+
     <div class="menu-group danger">
       <h3>Alles löschen</h3>
       <p class="hint">Entfernt sämtliche Termine von diesem Gerät. Das lässt sich nicht rückgängig machen.</p>
@@ -167,6 +172,28 @@
       <button type="submit" class="primary-button">Speichern</button>
     </div>
   </form>
+</dialog>
+
+<!-- ------------------------------------------------------------ Erster Start -->
+<dialog id="welcome-dialog" class="sheet" aria-label="Willkommen">
+  <div class="sheet-head">
+    <h2>Willkommen</h2>
+  </div>
+  <div class="menu-body">
+    <p class="lead">Dieser Terminplan gehört Ihnen allein. Damit die Begrüßung passt,
+      brauchen wir nur einen Namen – frei wählbar, auch ein Spitzname genügt.</p>
+    <label class="field">
+      <span>Wie möchten Sie angesprochen werden?</span>
+      <input id="welcome-name" placeholder="z. B. Erik" autocomplete="given-name" enterkeyhint="done">
+    </label>
+    <div class="privacy-box">
+      <h3>Ihre Daten bleiben auf diesem Gerät</h3>
+      <p id="welcome-privacy"></p>
+    </div>
+  </div>
+  <div class="sheet-foot">
+    <button id="welcome-start" class="primary-button">Verstanden – los geht’s</button>
+  </div>
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

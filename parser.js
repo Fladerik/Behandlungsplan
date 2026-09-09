@@ -36,7 +36,7 @@ const COLUMN_ROLES = [
   { role: "practitioner", pattern: /^(behandler|therapeut|durchf[üu]hrung|wer|personal)\b/i },
 ];
 
-const LOCATION_START = /^(raum|zimmer|halle|bad|becken|kabine|station|geb[äa]ude|haus|saal|treffpunkt|therapiezentrum|therapeutikum|bewegungsbad|ebene|stock|etage|og|ug|eg|flur|trakt|praxis|ambulanz|turnhalle|gymnastikraum|wartebereich|empfang|foyer|liegehalle|sauna|schwimmbad|speisesaal|aufenthaltsraum|schulungsraum|sporthalle|lehrküche|patientenzimmer|fernsehgerät|mtz|physio)\b/i;
+const LOCATION_START = /^(raum|zimmer|halle|bad|becken|kabine|station|geb[äa]ude|haus|saal|treffpunkt|therapiezentrum|therapeutikum|bewegungsbad|ebene|stock|etage|og|ug|eg|flur|trakt|praxis|ambulanz|turnhalle|gymnastikraum|wartebereich|empfang|foyer|liegehalle|sauna|schwimmbad|speisesaal|aufenthaltsraum|schulungsraum|sporthalle|lehrküche|patientenzimmer|fernsehgerät|mtz|physio|kurzentrum|treff|hallenbad|wartebereich|kg-wartebereich|vortragsr|hauskapelle|service)\b/i;
 
 const LOCATION_SUFFIX = /(raum|saal|halle|zimmer|bad|becken|kabine|studio|küche|garten|terrasse|bereich|platz|therapeutikum)$/i;
 
@@ -76,18 +76,23 @@ const KNOWN_TREATMENTS = [
   "Aufnahmeuntersuchung", "Abschlussuntersuchung", "Blutentnahme", "Belastungs-EKG", "EKG",
   "Lungenfunktion", "Röntgen", "Sprechstunde", "Dehnen/Mobilisieren", "Schmerzbewältigung",
   "Gelenkarthrose", "Fitness und Bewegung", "MTT Einführung", "KG einzel",
+  // Schreibweisen der Federseeklinik Bad Buchau, aus echten Plänen übernommen.
+  "Beweg.ther.Sch.", "Aquather. Sch.", "Mobi allg. BWB", "MTT Gruppe", "MTT Eigentraining",
+  "Ergo einzel", "Helparm Üben", "Einführung Helparm", "Schlingentisch", "Nachsorgevortrag",
+  "Begrüßungsvortrag", "Stressbewältigung", "Nordic Walking Info", "Info Ernährung",
+  "Oase am Mittag", "Fahrgeld", "Visite", "Eigentraining Therme",
   "Frühstück", "Mittagessen", "Abendessen", "Zwischenmahlzeit", "Anreise", "Abreise",
 ];
 
-// Reihenfolge ist bedeutsam: die erste passende Regel gewinnt.
-// Bewegung steht vor Massage, damit "Krankengymnastik im Bewegungsbad"
-// nicht wegen des Wortteils "bad" als Anwendung einsortiert wird.
+// Reihenfolge ist bedeutsam: die erste passende Regel gewinnt. Geprüft wird
+// nicht nur die Anwendung, sondern auch das Behandlerfeld -- dort steht bei
+// diesem Plan "Videoschulung" oder "Essensausgabe" und sagt mehr über die Art
+// des Termins als der Titel ("Gelenkarthrose").
 const CATEGORY_RULES = [
-  { id: "essen", pattern: /(frühstück|fruehstueck|mittagessen|abendessen|mahlzeit|lehrküche|kaffeetafel|essensausgabe)/i },
-  { id: "medizin", pattern: /(visite|arzt|ärztlich|untersuchung|\bekg\b|labor|blutentnahme|röntgen|sonograf|lungenfunktion|sprechstunde|aufnahmegespräch|abschlussgespräch|befund|diagnos|arthrose|schmerzbewältigung)/i },
-  { id: "bewegung", pattern: /(gymnastik|training|sport|walking|schwimm|bewegungsbad|aquajogging|ergometer|fahrrad|terrain|wandern|yoga|qigong|tai\s?chi|physiotherapie|krankengymnastik|manuelle\s+therapie|ergotherapie|atemtherapie|rückenschule|muskelentspannung|mobilisieren|dehnen|mobi\b|beweg|\bkg\b|\bmtt\b|fitness)/i },
-  { id: "massage", pattern: /(massage|packung|fango|moor|lymphdrainage|heißluft|rotlicht|wickel|kryo|elektrotherapie|ultraschall|stangerbad|vierzellenbad|inhalation|\bbad\b|solebad|kohlensäure)/i },
-  { id: "beratung", pattern: /(beratung|vortrag|schulung|seminar|gespräch|gruppe|psycholog|sozialdienst|ernährung|diät|entspannung|autogenes|information|\binfo\b|einführung)/i },
+  { id: "mahlzeit", pattern: /(frühstück|fruehstueck|mittagessen|abendessen|mahlzeit|essensausgabe|kaffeetafel|lehrküche)/i },
+  { id: "info", pattern: /(vortrag|videoschulung|schulung|\binfo\b|information|beratung|seminar|gespräch(?!stherapie)|sozialdienst|ernährungsberatung|diätberatung|begrüßung)/i },
+  { id: "training", pattern: /(\bmtt\b|eigentraining|trainingstherapie|gerätetraining|ergometer|nordic\s?walking|terraintraining|\btraining\b|fitness|gymnastik|sporthalle|selbständiges üben|üben\b|wandern|yoga|qigong|tai\s?chi)/i },
+  { id: "therapie", pattern: /(therapie|massage|packung|fango|moor|lymphdrainage|krankengymnastik|\bkg\b|ergo\b|schlingentisch|mobi\b|beweg\.?ther|aquather|bewegungsbad|hallenbad|\bbad\b|heißluft|rotlicht|kryo|elektro|ultraschall|inhalation|visite|arzt|ärztlich|untersuchung|\bekg\b|labor|blutentnahme|röntgen|sprechstunde|dehnen|mobilisieren|atemtherapie|entspannung|autogenes|muskelentspannung|helparm)/i },
 ];
 
 /* ----------------------------------------------------------------- Basics */
@@ -100,8 +105,8 @@ const clean = (value = "") => String(value)
 
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
-export function categorize(title = "", note = "") {
-  const hit = CATEGORY_RULES.find((rule) => rule.pattern.test(`${title} ${note}`));
+export function categorize(title = "", note = "", practitioner = "") {
+  const hit = CATEGORY_RULES.find((rule) => rule.pattern.test(`${title} ${note} ${practitioner}`));
   return hit ? hit.id : "sonstiges";
 }
 
@@ -219,14 +224,29 @@ export function correct(value, field, lexicon = {}) {
 
 /* ------------------------------------------------------- TSV -> Textzeilen */
 
-function tsvLines(tsv) {
+/**
+ * Die Texterkennung liefert Zeilenstuecke, keine Tabellenzeilen.
+ *
+ * Bei einer breiten Tabelle zerlegt Tesseract die Seite in Spaltenbloecke und
+ * gibt der rechten Spalte eigene "Zeilen". "17:30 Therapeutikum Abendessen"
+ * und "Essensausgabe" kommen dann getrennt an, obwohl sie dieselbe
+ * Tabellenzeile sind. Innerhalb eines Stuecks ist die Gruppierung dagegen
+ * verlaesslich -- also werden die Stuecke gebildet und anschliessend
+ * zusammengefuehrt.
+ */
+function tsvFragments(tsv) {
   const groups = new Map();
   for (const row of String(tsv || "").split(/\r?\n/).slice(1)) {
     const cells = row.split("\t");
     if (cells.length < 12 || cells[0] !== "5") continue;
     const text = clean(cells.slice(11).join("\t"));
     const confidence = Number(cells[10]);
-    if (!text || !(confidence > 20)) continue;
+    // Bewusst niedrig angesetzt: Abkuerzungen mit vielen Punkten
+    // ("Beweg.ther.Sch.") liest die Texterkennung mit Konfidenz um 15. Ein
+    // Termin ohne Anwendung ist schlechter als einer mit unsicherer, in der
+    // Pruefansicht markierter Anwendung. Reines Satzzeichen-Rauschen faellt
+    // ueber die zweite Bedingung heraus.
+    if (!text || confidence < 8 || !/[A-Za-zÄÖÜäöüß0-9]/.test(text)) continue;
     const key = `${cells[1]}-${cells[2]}-${cells[3]}-${cells[4]}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push({
@@ -235,23 +255,104 @@ function tsvLines(tsv) {
       width: Number(cells[8]), height: Number(cells[9]),
     });
   }
-  return [...groups.values()]
-    .map((words) => {
-      words.sort((a, b) => a.left - b.left);
-      return {
-        words,
-        top: Math.min(...words.map((word) => word.top)),
-        bottom: Math.max(...words.map((word) => word.top + word.height)),
-        left: words[0].left,
-        right: words.at(-1).left + words.at(-1).width,
-        height: Math.max(...words.map((word) => word.height)),
-        text: words.map((word) => word.text).join(" "),
-        confidence: Math.round(words.reduce((sum, word) => sum + word.confidence, 0) / words.length),
-      };
-    })
-    .filter((line) => line.text)
+  return [...groups.values()].map((words) => {
+    words.sort((a, b) => a.left - b.left);
+    return makeLine(words);
+  });
+}
+
+function makeLine(words) {
+  const top = Math.min(...words.map((word) => word.top));
+  const bottom = Math.max(...words.map((word) => word.top + word.height));
+  return {
+    words,
+    top,
+    bottom,
+    left: words[0].left,
+    right: words.at(-1).left + words.at(-1).width,
+    height: Math.max(...words.map((word) => word.height)),
+    middle: (top + bottom) / 2,
+    text: words.map((word) => word.text).join(" "),
+    confidence: Math.round(words.reduce((sum, word) => sum + word.confidence, 0) / words.length),
+  };
+}
+
+/**
+ * Schaetzt die Neigung der ganzen Seite.
+ *
+ * Ein abfotografiertes Blatt liegt nie exakt gerade. Statt fuer jede Zeile
+ * einzeln eine Ausgleichsgerade zu bilden -- was bei kurzen Zeilen wild
+ * extrapoliert -- wird die Neigung einmal fuer die Seite bestimmt: aus jedem
+ * hinreichend breiten Zeilenstueck ein Wert, davon der Median. Ausreisser
+ * fallen damit heraus.
+ */
+function pageSlope(fragments) {
+  const slopes = [];
+  for (const fragment of fragments) {
+    if (fragment.words.length < 2) continue;
+    const first = fragment.words[0];
+    const last = fragment.words.at(-1);
+    const dx = (last.left + last.width / 2) - (first.left + first.width / 2);
+    if (dx < 200) continue;
+    const dy = (last.top + last.height / 2) - (first.top + first.height / 2);
+    slopes.push(dy / dx);
+  }
+  if (!slopes.length) return 0;
+  slopes.sort((a, b) => a - b);
+  const median = slopes[Math.floor(slopes.length / 2)];
+  return Math.max(-MAX_SLOPE, Math.min(MAX_SLOPE, median));
+}
+
+const MAX_SLOPE = 0.12;
+
+/**
+ * Fuehrt die Zeilenstuecke zu Tabellenzeilen zusammen.
+ *
+ * Die Seitenneigung wird herausgerechnet, indem jedes Stueck auf eine
+ * gemeinsame Grundlinie projiziert wird. Danach ist die Zuordnung ein
+ * einfacher Vergleich der Hoehe -- unabhaengig davon, wie schief das Blatt
+ * beim Fotografieren lag.
+ */
+function mergeFragments(fragments) {
+  const slope = pageSlope(fragments);
+  const baseline = (fragment) => fragment.middle - slope * fragment.left;
+
+  const rows = [];
+  for (const fragment of [...fragments].sort((a, b) => a.left - b.left)) {
+    const level = baseline(fragment);
+    let best = null;
+    let bestDistance = Infinity;
+    for (const row of rows) {
+      // Ueberlappen sich zwei Stuecke waagerecht, stehen sie untereinander
+      // und gehoeren nicht in dieselbe Tabellenzeile.
+      if (fragment.left < row.right - 10) continue;
+      const distance = Math.abs(row.level - level);
+      const tolerance = Math.max(fragment.height, row.height) * 0.55;
+      if (distance < tolerance && distance < bestDistance) {
+        best = row;
+        bestDistance = distance;
+      }
+    }
+    if (best) {
+      best.words.push(...fragment.words);
+      best.right = Math.max(best.right, fragment.right);
+      best.height = Math.max(best.height, fragment.height);
+      // Die Grundlinie wird nachgefuehrt, damit eine leichte Woelbung
+      // ueber die Zeilenbreite mitgenommen wird.
+      best.level = (best.level + level) / 2;
+    } else {
+      rows.push({ ...fragment, level });
+    }
+  }
+  return rows
+    .map((row) => makeLine(row.words.sort((a, b) => a.left - b.left)))
     .sort((a, b) => a.top - b.top);
 }
+
+const tsvLines = (tsv) => mergeFragments(tsvFragments(tsv)).filter((line) => line.text);
+
+/** Neigung der Aufnahme in Grad -- Grundlage für den Hinweis an den Nutzer. */
+const tiltDegrees = (tsv) => Math.abs(Math.atan(pageSlope(tsvFragments(tsv))) * 180 / Math.PI);
 
 /**
  * Zerlegt eine Zeile an den tatsaechlichen Luecken zwischen den Woertern.
@@ -289,8 +390,18 @@ function splitCells(words, height) {
 const isChrome = (text) => /^(behandlungsplan|therapieplan|tagesplan|wochenplan|seite\s|zuletzt gedruckt|patientennummer|zimmernummer|kostenträger|anreise|abreise|patient|name|geb\.?|vielen dank|sehr geehrte)/i.test(text)
   || /^[\s\-_=.,:•]+$/.test(text);
 
-/** Erlaeuterungen zwischen den Terminen. Sie enthalten oft selbst Uhrzeiten. */
-const isNoteLine = (text) => /^(bitte|wir bitten|hinweis|achtung|öffnungszeiten|nach dem erhalt|wasserspuren|sprechzeiten|den internen|therapeutikum oder|an der kasse|pfandquittung|zimmer ein|raum geöffnet|gewährleistet|dar$|12 uhr|und davon|diesen terminen|rechter schalter)/i.test(text.trim());
+/**
+ * Erlaeuterungen zwischen den Terminen. Sie enthalten oft selbst Uhrzeiten
+ * ("In der Zeit von 7 - 9 Uhr") und wuerden sonst Termine erfinden.
+ */
+function isNoteLine(text) {
+  const value = text.trim();
+  if (/^(bitte|wir bitten|hinweis|achtung|öffnungszeiten|nach dem erhalt|wasserspuren|sprechzeiten|den internen|die auszahlung|die "oase|die oase|therapeutikum oder|an der kasse|pfandquittung|zimmer ein|raum geöffnet|gewährleistet|nordic walking findet|alle sind herzlich|es findet|dienstags von|12 uhr|16:00 uhr|und davon|diesen terminen|rechter schalter)/i.test(value)) return true;
+  // Ein ganzer Satz ist keine Tabellenzeile: viele Woerter, Satzzeichen am
+  // Ende und eine Anrede oder ein Verb darin.
+  const words = value.split(/\s+/);
+  return words.length >= 8 && /[.!?]$/.test(value) && /\b(sie|ihr|ihre|ihres|wir|ist|sind|wird|werden|erfolgt|findet|können|bitte)\b/i.test(value);
+}
 
 const isColumnHeading = (text) => COLUMN_ROLES.some((entry) => entry.pattern.test(text.trim()));
 
@@ -359,7 +470,9 @@ function slotsToFields(slots, anchors) {
 
 function assignByColumns(cells, anchors) {
   const slots = [];
-  for (const cell of cells) {
+  // Ein ganzer Satz in einer Zelle ist ein Hinweistext, der in die
+  // Terminzeile hineingerutscht ist -- nicht der Name einer Anwendung.
+  for (const cell of cells.filter((cell) => !isNoteLine(cell.text))) {
     const index = columnIndexAt(anchors, cell);
     (slots[index] ||= []).push(cell.text);
   }
@@ -471,6 +584,14 @@ export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date
     return { days: items.length ? [{ date, items }] : [], warnings, confidence: 0, skipped: 0 };
   }
 
+  // Ab etwa vier Grad Neigung rutschen die Spalten gegeneinander und die
+  // Zuordnung wird unzuverlässig. Darauf wird hingewiesen, statt still
+  // falsche Termine zu speichern.
+  const tilt = tiltDegrees(tsv);
+  if (tilt > 4) {
+    warnings.push(`Das Foto ist um etwa ${Math.round(tilt)} Grad geneigt. Bitte das Blatt flach hinlegen und von oben fotografieren – sonst können Spalten vertauscht werden.`);
+  }
+
   const columns = findColumns(lines);
   const sections = splitIntoDays(lines, fallbackYear);
 
@@ -495,6 +616,14 @@ export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date
   }
 
   if (!days.length) warnings.push("Es wurden keine Uhrzeiten erkannt. Termine können unten von Hand ergänzt werden.");
+  for (const day of days) {
+    // Ein Plan läuft chronologisch. Springt die Reihenfolge, hat die
+    // Zeilenzuordnung gelitten -- ein verlässliches Warnsignal.
+    const times = day.items.map((item) => item.time);
+    if (times.some((time, index) => index > 0 && time < times[index - 1])) {
+      warnings.push("Die Uhrzeiten stehen nicht in der richtigen Reihenfolge. Bitte diesen Tag besonders sorgfältig prüfen.");
+    }
+  }
   for (const day of days) {
     if (!day.date) warnings.push(`${day.items.length} Termine ohne erkanntes Datum – bitte das Datum eintragen.`);
   }
@@ -556,7 +685,14 @@ function fromLines(lines, columns, lexicon) {
       // Schrifthoehe), eine neue Tabellenzeile hat das Zellpolster dazwischen.
       const cells = splitCells(line.words, line.height);
       if (!cells.length) continue;
-      const isWrap = previous && line.top - previous.bottom < previous.height * CONTINUATION_GAP;
+      // "MTT Eigentraining" steht als eigene Tabellenzeile ohne Uhrzeit und
+      // darf nicht an den Termin darueber angehaengt werden. Ein bekannter,
+      // fuer sich stehender Begriff ist nie die Fortsetzung eines anderen.
+      const own = clean(line.words.map((word) => word.text).join(" "));
+      const standsAlone = Boolean(bestMatch(own, [...KNOWN_TREATMENTS, ...Object.keys(lexicon.title || {})]));
+      const isWrap = previous
+        && !standsAlone
+        && line.top - previous.bottom < previous.height * CONTINUATION_GAP;
       if (isWrap) {
         for (const cell of cells) {
           if (columns) {
@@ -611,7 +747,7 @@ function fromLines(lines, columns, lexicon) {
       location: location.value,
       practitioner: practitioner.value,
       note: assigned.note,
-      category: categorize(title.value, assigned.note),
+      category: categorize(title.value, assigned.note, practitioner.value),
       confidence: row.confidence,
       corrections: [title, practitioner, location]
         .filter((entry) => entry.corrected)
@@ -644,7 +780,7 @@ function fromPlainText(text, lexicon) {
       location: assigned.location,
       practitioner: assigned.practitioner,
       note: assigned.note,
-      category: categorize(title.value),
+      category: categorize(title.value, assigned.note, assigned.practitioner),
       confidence: 0,
       corrections: title.corrected ? [`${title.from} → ${title.value}`] : [],
     });
