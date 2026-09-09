@@ -25,11 +25,14 @@ AddType text/javascript .mjs
   Header always set Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=(), interest-cohort=()"
   # Alles wird lokal ausgeliefert; es gibt keine Verbindung nach außen.
   Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-  # Die Sprachdatei liegt bereits gepackt vor.
-  <FilesMatch "\.gz$">
-    Header set Content-Encoding gzip
-  </FilesMatch>
 </IfModule>
+
+# Hinweis zur Sprachdatei tessdata/deu.traineddata.gz:
+# Sie wird bewusst OHNE "Content-Encoding: gzip" ausgeliefert. Die
+# Texterkennung entpackt sie selbst -- so lief die gesamte Erprobung. Mit dem
+# Header wuerde stattdessen der Browser entpacken; das ist ein anderer Weg,
+# den niemand getestet hat. Der Header bringt hier nichts: die Datei ist
+# bereits gepackt und wird nur ein einziges Mal geladen.
 
 # Der Service Worker darf nie aus einem alten Zwischenspeicher kommen.
 <Files "service-worker.js">
