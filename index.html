@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0d5c63">
+  <meta name="theme-color" content="#0e3a6b">
   <meta name="description" content="Behandlungsplan fotografieren, Termine prüfen und auf dem eigenen Gerät behalten.">
   <title>Federsee Terminplan</title>
   <link rel="manifest" href="./manifest.webmanifest">
@@ -16,6 +16,11 @@
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand">
+      <!-- Platz für das FUGO-/TaM2-Logo.
+           Zum Einsetzen: die Datei als "logo.svg" (oder logo.png) neben
+           index.html legen und die folgenden drei Zeilen durch
+           <img src="./logo.svg" alt="FUGO Labs" class="brand-logo"> ersetzen.
+           Bis dahin steht hier ein neutrales Kalendersymbol. -->
       <span class="brand-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8.5" cy="14.5" r="1.3" fill="currentColor"/><circle cx="12" cy="14.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="14.5" r="1.3" fill="currentColor"/></svg>
       </span>
@@ -65,9 +70,19 @@
 </nav>
 
 <footer class="app-foot">
-  <p><strong>Federsee Terminplan</strong> — eine Anwendung von
-    <a href="https://www.fugolabs.de" target="_blank" rel="noopener">Fugo&nbsp;Labs</a>
-    · <a href="https://www.fugolabs.de/tam2" target="_blank" rel="noopener">TaM2</a></p>
+  <p class="app-foot-brand">
+    Designed by
+    <a href="https://www.cameraorganizer.com" target="_blank" rel="noopener">FUGO&nbsp;Labs</a>
+  </p>
+  <p class="app-foot-links">
+    <a href="https://www.cameraorganizer.com" target="_blank" rel="noopener">FUGO</a>
+    <span aria-hidden="true">·</span>
+    <a class="tam" href="https://www.fugo-labs.de/tam2" target="_blank" rel="noopener">TaM²</a>
+    <span aria-hidden="true">·</span>
+    <a href="./rechtliches.html#impressum">Impressum</a>
+    <span aria-hidden="true">·</span>
+    <a href="./rechtliches.html#datenschutz">Datenschutz</a>
+  </p>
   <p class="app-foot-note">Alle Daten bleiben auf diesem Gerät. Bitte erkannte Termine vor der Nutzung prüfen.</p>
 </footer>
 
@@ -169,11 +184,16 @@
 
     <div class="menu-group">
       <h3>Über diese App</h3>
-      <p class="hint">Der <strong>Federsee Terminplan</strong> ist eine Anwendung von
-        <a href="https://www.fugolabs.de" target="_blank" rel="noopener">Fugo Labs</a>.
-        Sie arbeitet ohne Anmeldung und ohne Server.</p>
-      <p class="hint">Mehr über unsere Anwendungen:
-        <a href="https://www.fugolabs.de/tam2" target="_blank" rel="noopener">fugolabs.de/tam2</a></p>
+      <p class="hint">Der <strong>Federsee Terminplan</strong> arbeitet ohne Anmeldung und ohne
+        Server. Designed by <a href="https://www.cameraorganizer.com" target="_blank" rel="noopener">FUGO Labs</a>.</p>
+      <p class="hint">
+        <a href="https://www.cameraorganizer.com" target="_blank" rel="noopener">FUGO — Tag Your Life</a><br>
+        <a class="tam" href="https://www.fugo-labs.de/tam2" target="_blank" rel="noopener">TaM² — Tag a Moment</a>
+      </p>
+      <p class="hint">
+        <a href="./rechtliches.html#impressum">Impressum</a> ·
+        <a href="./rechtliches.html#datenschutz">Datenschutz</a>
+      </p>
     </div>
   </div>
 </dialog>
@@ -219,6 +239,7 @@
     <div class="privacy-box">
       <h3>Ihre Daten bleiben auf diesem Gerät</h3>
       <p id="welcome-privacy"></p>
+      <p class="privacy-more"><a href="./rechtliches.html#datenschutz">Vollständige Datenschutzerklärung</a></p>
     </div>
   </div>
   <div class="sheet-foot">

@@ -14,12 +14,19 @@
 const KEY = "federsee.plan.v3";
 const LEGACY_KEYS = ["federsee.plan.v2", "federsee.plan.v1", "federseePlan", "behandlungsplan"];
 
+/**
+ * Kategorien und ihre Kennfarben.
+ *
+ * Die Toene sind gedeckt gewaehlt: Sie muessen sich voneinander unter-
+ * scheiden lassen, ohne dem Markenblau die Aufmerksamkeit zu nehmen. Das
+ * kraeftige Blau bleibt dem naechsten Termin vorbehalten.
+ */
 export const CATEGORIES = [
-  { id: "therapie", label: "Therapie", color: "#0f7a86" },
-  { id: "training", label: "Training", color: "#4a7a2f" },
-  { id: "mahlzeit", label: "Mahlzeit", color: "#8a5a2b" },
-  { id: "info", label: "Info/Vortrag", color: "#4a5aa8" },
-  { id: "sonstiges", label: "Sonstiges", color: "#5a6470" },
+  { id: "therapie", label: "Therapie", color: "#0e7490" },
+  { id: "training", label: "Training", color: "#15803d" },
+  { id: "mahlzeit", label: "Mahlzeit", color: "#b45309" },
+  { id: "info", label: "Info/Vortrag", color: "#6d28d9" },
+  { id: "sonstiges", label: "Sonstiges", color: "#64748b" },
 ];
 
 const emptyState = () => ({

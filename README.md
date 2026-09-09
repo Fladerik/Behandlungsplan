@@ -1,6 +1,9 @@
 # Federsee Terminplan
 
-Eine Anwendung von **Fugo Labs**.
+Designed by **FUGO Labs** — [cameraorganizer.com](https://www.cameraorganizer.com)
+
+Die Anwendung übernimmt das Blau von FUGO als Hauptfarbe; das Orange von
+TaM² bleibt dem Verweis auf diese zweite Anwendung vorbehalten.
 
 Webapp, mit der Patientinnen und Patienten ihren Behandlungsplan fotografieren
 oder als PDF hochladen. Die Termine werden erkannt, einmal geprüft und liegen
@@ -58,6 +61,7 @@ Uhr „Guten Morgen“, bis 18:00 Uhr „Hallo“, danach „Guten Abend“.
 | `parser.js` | Aus erkanntem Text wird ein Tagesplan |
 | `deskew.js` | Blatt im Foto finden und geradeziehen |
 | `pruefen.html` | Prüft nach dem Hochladen, ob alle Dateien angekommen sind |
+| `rechtliches.html` | Impressum und Datenschutzerklärung |
 | `ocr.js` | Fotos und PDF-Dateien werden zu Text |
 | `ics.js` | Kalenderdatei für Apple, Google und Outlook |
 | `app.js` | Oberfläche und Ablauf |
@@ -190,6 +194,25 @@ Texterkennung selbst als unsicher meldet.
 
 **Gespeichert wird nie ohne Prüfung.** Das Erkennungsergebnis landet zuerst in
 einer bearbeitbaren Liste. Erst „Speichern“ schreibt es in den Plan.
+
+## Farben und Logo anpassen
+
+Alle Blautöne der App leiten sich aus fünf Werten am Anfang von `styles.css`
+ab (`--marke-900` bis `--marke-100`). Um den Markenton zu ändern, genügt es,
+diese zu ersetzen — an keiner anderen Stelle steht eine Blauangabe fest im
+Code. Das Orange für TaM² steht darunter als `--tam-orange`.
+
+Für das Logo ist in `index.html` eine Stelle vorbereitet: die Datei als
+`logo.svg` neben `index.html` legen und die drei kommentierten Zeilen im
+Kopfbereich durch `<img src="./logo.svg" alt="FUGO Labs" class="brand-logo">`
+ersetzen. Die Größe passt sich automatisch ein.
+
+## Impressum
+
+`rechtliches.html` enthält Impressum und Datenschutzerklärung. **Die
+Impressumsangaben sind Platzhalter** und müssen vor der Veröffentlichung durch
+die tatsächlichen Daten ersetzt werden — sie stehen im Abschnitt „Angaben gemäß
+§ 5 DDG" in eckigen Klammern.
 
 ## Datenschutz
 

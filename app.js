@@ -738,6 +738,19 @@ function bind() {
 
   $$("[data-close]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
 
+  // Kopfbereich beim Scrollen verkleinern. Der Umschaltpunkt hat einen
+  // Abstand nach oben und unten, damit die Leiste bei einer Bewegung um
+  // wenige Pixel nicht hin- und herspringt.
+  const topbar = document.querySelector(".topbar");
+  let kompakt = false;
+  const pruefeScroll = () => {
+    const y = window.scrollY;
+    if (!kompakt && y > 56) { kompakt = true; topbar.classList.add("is-kompakt"); }
+    else if (kompakt && y < 24) { kompakt = false; topbar.classList.remove("is-kompakt"); }
+  };
+  window.addEventListener("scroll", pruefeScroll, { passive: true });
+  pruefeScroll();
+
   // Dateien lassen sich auch am Rechner auf das Fenster ziehen.
   document.addEventListener("dragover", (event) => event.preventDefault());
   document.addEventListener("drop", (event) => {
