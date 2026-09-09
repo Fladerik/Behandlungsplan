@@ -113,18 +113,48 @@ function renderNextUp() {
     container.innerHTML = `<div class="next-card is-empty">Zurzeit steht kein weiterer Termin an.</div>`;
     return;
   }
-  const { day, item } = next;
-  const when = day.date === store.todayISO() ? "Heute" : fmtDay.format(dateOf(day.date));
-  const meta = [item.location, item.practitioner].filter(Boolean).join(" · ");
+
+  const { day, item, laeuft } = next;
+  const heute = day.date === store.todayISO();
+  const wann = heute ? "Heute" : fmtDay.format(dateOf(day.date));
+  const meta = [item.location, item.practitioner].filter(Boolean)
+    .map((wert) => `<span>${escapeHTML(wert)}</span>`).join("");
+
   container.innerHTML = `
-    <div class="next-card">
-      <div class="clock">${escapeHTML(item.time || "--:--")}</div>
+    <div class="next-card ${laeuft ? "is-now" : ""}">
+      <p class="eyebrow">
+        ${laeuft ? "Läuft gerade" : "Nächster Termin"} · ${escapeHTML(wann)}
+        <span class="rest">${escapeHTML(restText(day, item, laeuft))}</span>
+      </p>
+      <div class="clock">${escapeHTML(item.time || "--:--")}<small>bis ${escapeHTML(endOf(item.time, item.duration))}</small></div>
       <div class="body">
-        <p class="eyebrow">Nächster Termin · ${escapeHTML(when)}</p>
-        <p class="title">${escapeHTML(item.title)}</p>
-        ${meta ? `<p class="meta">${escapeHTML(meta)}</p>` : ""}
+        <p class="title">${escapeHTML(item.title || "Ohne Bezeichnung")}</p>
+        ${meta ? `<p class="meta">${meta}</p>` : ""}
       </div>
     </div>`;
+}
+
+/** "in 25 Min.", "noch 20 Min.", "morgen" -- was für den Patienten zählt. */
+function restText(day, item, laeuft) {
+  const jetzt = new Date();
+  if (day.date !== store.todayISO()) {
+    const tage = Math.round((dateOf(day.date) - dateOf(store.todayISO())) / 86400000);
+    return tage === 1 ? "morgen" : `in ${tage} Tagen`;
+  }
+  const [stunde, minute] = (item.time || "00:00").split(":").map(Number);
+  const beginn = stunde * 60 + minute;
+  const minutenJetzt = jetzt.getHours() * 60 + jetzt.getMinutes();
+
+  if (laeuft) {
+    const rest = beginn + (Number(item.duration) || 30) - minutenJetzt;
+    return rest <= 1 ? "endet gleich" : `noch ${rest} Min.`;
+  }
+  const bis = beginn - minutenJetzt;
+  if (bis <= 0) return "jetzt";
+  if (bis < 60) return `in ${bis} Min.`;
+  const stunden = Math.floor(bis / 60);
+  const restMinuten = bis % 60;
+  return restMinuten ? `in ${stunden} Std. ${restMinuten} Min.` : `in ${stunden} Std.`;
 }
 
 /** Die Tagesleiste zeigt heute und die folgenden Tage -- Vergangenes nur im Kalender. */
@@ -375,11 +405,11 @@ function renderReview() {
 
   // Der wichtigste Satz für die Nutzer: Ein Fehler kostet nichts. Genau das
   // nimmt die Scheu, überhaupt zu fotografieren.
-  const reassurance = `<p class="retry-note">Etwas falsch erkannt? Sie können jeden Tag
-    beliebig oft neu fotografieren – der neue Plan ersetzt den alten. Am besten das Blatt
-    flach hinlegen und gerade von oben aufnehmen.</p>`;
+  const reassurance = `<p class="retry-note">Etwas falsch erkannt? Jeden Tag beliebig oft neu
+    fotografieren – der neue Plan ersetzt den alten. Am besten das Blatt flach hinlegen
+    und gerade von oben aufnehmen.</p>`;
 
-  $("#review-body").innerHTML = globalWarnings + reassurance + ui.review.map((day, dayIndex) => {
+  $("#review-body").innerHTML = globalWarnings + ui.review.map((day, dayIndex) => {
     const heading = day.date ? escapeHTML(fmtDay.format(dateOf(day.date))) : "Tag ohne erkanntes Datum";
 
     const conflict = day.existingCount
@@ -408,7 +438,7 @@ function renderReview() {
         ${day.items.map((item, itemIndex) => reviewRow(item, dayIndex, itemIndex)).join("")}
         <button class="ghost-button" data-add-row="${dayIndex}">+ Zeile ergänzen</button>
       </section>`;
-  }).join("");
+  }).join("") + reassurance;
 }
 
 function reviewRow(item, dayIndex, itemIndex) {
@@ -424,7 +454,7 @@ function reviewRow(item, dayIndex, itemIndex) {
     <div class="review-row ${flagged ? "is-flagged" : ""}" data-row="${dayIndex}:${itemIndex}">
       <input type="time" data-field="time" value="${escapeHTML(item.time)}" aria-label="Uhrzeit">
       <div class="fields">
-        <input data-field="title" value="${escapeHTML(item.title)}" placeholder="Anwendung" aria-label="Anwendung">
+        <input class="titel" data-field="title" value="${escapeHTML(item.title)}" placeholder="Anwendung eintragen" aria-label="Anwendung">
         <div class="pair">
           <input data-field="location" value="${escapeHTML(item.location)}" placeholder="Ort" aria-label="Ort">
           <input data-field="practitioner" value="${escapeHTML(item.practitioner)}" placeholder="Behandler" aria-label="Behandler">
@@ -734,13 +764,38 @@ bind();
 render();
 maybeWelcome();
 
-// Der Tageswechsel um Mitternacht soll die Ansicht ohne Neuladen mitnehmen.
-let lastDay = store.todayISO();
-setInterval(() => {
-  const today = store.todayISO();
-  if (today !== lastDay) { lastDay = today; ui.selectedDay = "alle"; }
+/**
+ * Der Plan muss von selbst aktuell bleiben -- Patienten verlassen sich darauf.
+ * Aktualisiert wird jeweils zur vollen Minute, damit der nächste Termin genau
+ * dann umspringt, wenn die Uhr weiterspringt, und nicht bis zu 59 Sekunden
+ * später. Zusätzlich beim Zurückkehren zur Seite: auf dem Telefon stehen
+ * Zeitgeber im Hintergrund still.
+ */
+let letzterTag = store.todayISO();
+
+function aktualisiereAnsicht() {
+  const heute = store.todayISO();
+  if (heute !== letzterTag) {
+    letzterTag = heute;
+    ui.selectedDay = "alle";
+  }
   render();
-}, 60000);
+}
+
+function planeNaechsteMinute() {
+  const jetzt = new Date();
+  const bisZurVollenMinute = 60000 - (jetzt.getSeconds() * 1000 + jetzt.getMilliseconds());
+  setTimeout(() => {
+    aktualisiereAnsicht();
+    planeNaechsteMinute();
+  }, bisZurVollenMinute + 40);
+}
+
+planeNaechsteMinute();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") aktualisiereAnsicht();
+});
+window.addEventListener("focus", aktualisiereAnsicht);
 
 store.subscribe((_, detail) => {
   if (detail?.type === "storage-error") {

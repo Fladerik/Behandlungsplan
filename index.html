@@ -19,12 +19,14 @@
       <span class="brand-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8.5" cy="14.5" r="1.3" fill="currentColor"/><circle cx="12" cy="14.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="14.5" r="1.3" fill="currentColor"/></svg>
       </span>
-      <div>
+      <div class="brand-text">
         <h1 id="greeting">Federsee Terminplan</h1>
-        <p id="brand-sub">Dein persönlicher Therapie- und Tagesplan</p>
+        <p id="brand-sub">Ihr Therapie- und Tagesplan</p>
       </div>
     </div>
-    <button id="menu-button" class="icon-button" aria-label="Menü öffnen" aria-haspopup="dialog">⋯</button>
+    <button id="menu-button" class="icon-button" aria-label="Menü öffnen" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/></svg>
+    </button>
   </div>
 
   <!-- Nächster Termin: die wichtigste Information, immer sichtbar -->
@@ -62,6 +64,13 @@
   <button id="add-item" class="secondary-button">+ Termin</button>
 </nav>
 
+<footer class="app-foot">
+  <p><strong>Federsee Terminplan</strong> — eine Anwendung von
+    <a href="https://www.fugolabs.de" target="_blank" rel="noopener">Fugo&nbsp;Labs</a>
+    · <a href="https://www.fugolabs.de/tam2" target="_blank" rel="noopener">TaM2</a></p>
+  <p class="app-foot-note">Alle Daten bleiben auf diesem Gerät. Bitte erkannte Termine vor der Nutzung prüfen.</p>
+</footer>
+
 <input id="file-input" type="file" accept="image/*,application/pdf" multiple hidden>
 
 <!-- ------------------------------------------------------------ Kalender -->
@@ -89,6 +98,17 @@
     <button class="icon-button" data-close aria-label="Schließen">✕</button>
   </div>
   <div id="review-progress" class="progress" hidden>
+    <div class="progress-figure" aria-hidden="true">
+      <svg viewBox="0 0 48 48" width="46" height="46">
+        <rect x="9" y="5" width="30" height="38" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M15 15h18M15 22h18M15 29h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+        <circle cx="34" cy="34" r="9.5" fill="var(--paper)" stroke="currentColor" stroke-width="2"/>
+        <path d="M34 29v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h3>Der Plan wird gelesen</h3>
+    <p class="progress-lead">Das geschieht vollständig auf diesem Gerät – je nach Anzahl der Seiten
+      dauert es einige Sekunden. Bitte das Fenster offen lassen.</p>
     <div class="progress-track"><div id="progress-bar"></div></div>
     <p id="progress-text">Vorbereitung …</p>
   </div>
@@ -146,6 +166,15 @@
     </div>
 
     <p class="storage-note" id="storage-note"></p>
+
+    <div class="menu-group">
+      <h3>Über diese App</h3>
+      <p class="hint">Der <strong>Federsee Terminplan</strong> ist eine Anwendung von
+        <a href="https://www.fugolabs.de" target="_blank" rel="noopener">Fugo Labs</a>.
+        Sie arbeitet ohne Anmeldung und ohne Server.</p>
+      <p class="hint">Mehr über unsere Anwendungen:
+        <a href="https://www.fugolabs.de/tam2" target="_blank" rel="noopener">fugolabs.de/tam2</a></p>
+    </div>
   </div>
 </dialog>
 

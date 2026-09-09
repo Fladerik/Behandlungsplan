@@ -160,20 +160,39 @@ export function pastDays(before = todayISO()) {
   return allDays().filter((day) => day.date < before).reverse();
 }
 
-/** Naechster noch nicht begonnener Termin, inklusive Datum. */
+/**
+ * Der Termin, der als naechstes ansteht -- oder der gerade laeuft.
+ *
+ * Massgeblich ist das ENDE, nicht der Beginn: Ein Termin, der um 09:00 beginnt
+ * und 45 Minuten dauert, bleibt bis 09:45 der aktuelle. Wer um 09:10 auf das
+ * Telefon schaut, soll sehen, wo er gerade sein muss -- nicht schon den
+ * uebernaechsten Termin.
+ */
 export function nextAppointment(now = new Date()) {
   const today = toISO(now);
-  const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const minutenJetzt = now.getHours() * 60 + now.getMinutes();
+
   for (const day of allDays()) {
     if (day.date < today) continue;
     for (const item of day.items) {
       if (item.done) continue;
-      if (day.date === today && item.time && item.time < clock) continue;
-      return { day, item };
+      if (day.date > today) return { day, item, laeuft: false };
+      const ende = endeInMinuten(item);
+      if (ende > minutenJetzt) {
+        return { day, item, laeuft: beginnInMinuten(item) <= minutenJetzt };
+      }
     }
   }
   return null;
 }
+
+const beginnInMinuten = (item) => {
+  if (!item.time) return 0;
+  const [stunde, minute] = item.time.split(":").map(Number);
+  return stunde * 60 + minute;
+};
+
+const endeInMinuten = (item) => beginnInMinuten(item) + (Number(item.duration) || 30);
 
 /* ------------------------------------------------------------ Tage aendern */
 

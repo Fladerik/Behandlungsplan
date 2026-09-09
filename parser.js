@@ -84,6 +84,27 @@ const KNOWN_TREATMENTS = [
   "Frühstück", "Mittagessen", "Abendessen", "Zwischenmahlzeit", "Anreise", "Abreise",
 ];
 
+/**
+ * Ortsangaben, die auf diesen Plaenen vorkommen.
+ *
+ * Die Texterkennung verliert regelmaessig Anfangsbuchstaben ("Sporthalle"
+ * wird zu "orthalle", "Haus" zu "Has"). Gegen solche Verluste hilft kein
+ * besseres Modell, sondern nur ein Abgleich mit dem, was auf dem Plan
+ * ueberhaupt stehen kann. Das Woerterbuch lernt weiter dazu; dies ist der
+ * Grundbestand, damit schon der erste Scan sitzt.
+ */
+const KNOWN_LOCATIONS = [
+  "Therapeutikum", "Haus am Gsundbrunnen", "Haus am Park", "Kurzentrum",
+  "Treff Sporthalle", "Sporthalle", "Patientenzimmer", "Hallenbad",
+  "Saal Kanzach", "Saal Bad Buchau", "Speisesaal", "Hauskapelle",
+  "Bewegungsbad", "EG Bewegungsbad", "EG Fango", "EG Ergotherapie",
+  "EG Physio Warteber.", "EG Vortragsr. Bussen", "Wartebereich Sporth.",
+  "KG-Wartebereich", "MTZ Fitnessraum", "Fernsehgerät Pr. 33",
+  "Fitnessraum", "Ergotherapie", "Physiotherapie", "Fango",
+  "Raum", "Haus", "Saal", "Halle", "Bad", "Kabine", "Turnhalle",
+  "Schulungsraum", "Gymnastikraum", "Empfang", "Service Center",
+];
+
 // Reihenfolge ist bedeutsam: die erste passende Regel gewinnt. Geprüft wird
 // nicht nur die Anwendung, sondern auch das Behandlerfeld -- dort steht bei
 // diesem Plan "Videoschulung" oder "Essensausgabe" und sagt mehr über die Art
@@ -185,10 +206,12 @@ const foldForCompare = (value) => value.toLocaleLowerCase("de-DE")
  */
 export function bestMatch(value, candidates) {
   const needle = foldForCompare(value);
-  if (needle.length < 4) return null;
+  // Ab drei Zeichen, damit auch "Has" noch zu "Haus" findet -- dort aber nur
+  // mit Abstand 1, sonst wuerde aus "Bad" ein "Bau".
+  if (needle.length < 3) return null;
   // Zahlen unterscheiden Raeume voneinander: nur Kandidaten mit denselben Ziffern.
   const digits = needle.replace(/\D/g, "");
-  const budget = needle.length <= 6 ? 1 : needle.length <= 12 ? 2 : 3;
+  const budget = needle.length <= 3 ? 1 : needle.length <= 6 ? 1 : needle.length <= 12 ? 2 : 3;
   let best = null;
   for (const candidate of candidates) {
     const hay = foldForCompare(candidate);
@@ -201,14 +224,48 @@ export function bestMatch(value, candidates) {
   return best;
 }
 
+/**
+ * Begradigt eine mehrteilige Angabe stueckweise.
+ *
+ * "Treff orthalle" findet als Ganzes keinen Treffer, wohl aber sein zweites
+ * Wort. Deshalb wird zusaetzlich Wort fuer Wort geprueft -- allerdings nur
+ * gegen den Grundbestand, damit nicht jedes Wort zu irgendetwas wird.
+ */
+function korrigiereWortweise(text, kandidaten) {
+  const woerter = text.split(/\s+/);
+  if (woerter.length < 2) return text;
+  let geaendert = false;
+  const neu = woerter.map((wort) => {
+    // Satzzeichen am Rand gehoeren nicht zum Wort: das Komma trennt hier Haus
+    // und Behandlungsstelle und muss stehen bleiben.
+    const teile = wort.match(/^([^\wÄÖÜäöüß]*)(.*?)([^\wÄÖÜäöüß]*)$/);
+    const [, davor, kern, danach] = teile;
+    if (kern.length < 4 || /\d/.test(kern)) return wort;
+    const treffer = bestMatch(kern, kandidaten);
+    if (treffer && treffer.value !== kern && treffer.value.split(/\s+/).length === 1) {
+      geaendert = true;
+      return `${davor}${treffer.value}${danach}`;
+    }
+    return wort;
+  });
+  return geaendert ? neu.join(" ") : text;
+}
+
 /** Korrigiert einen erkannten Text gegen bekannte Begriffe. */
 export function correct(value, field, lexicon = {}) {
   const text = clean(value);
   if (!text) return { value: "", corrected: false };
   const learned = Object.entries(lexicon[field] || {}).sort((a, b) => b[1] - a[1]).map(([term]) => term);
-  const pool = field === "title" ? [...learned, ...KNOWN_TREATMENTS] : learned;
+  const grundbestand = field === "title" ? KNOWN_TREATMENTS : field === "location" ? KNOWN_LOCATIONS : [];
+  const pool = [...learned, ...grundbestand];
   const match = bestMatch(text, pool);
-  if (!match || match.value === text) return { value: text, corrected: false };
+  if (!match) {
+    const wortweise = korrigiereWortweise(text, grundbestand);
+    return wortweise === text
+      ? { value: text, corrected: false }
+      : { value: wortweise, corrected: true, from: text };
+  }
+  if (match.value === text) return { value: text, corrected: false };
 
   // Bei echtem Abstand gewinnt der bekannte Begriff -- das ist der Zweck des
   // Woerterbuchs. Sind beide Schreibweisen dagegen nach der Normalisierung

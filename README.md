@@ -1,5 +1,7 @@
 # Federsee Terminplan
 
+Eine Anwendung von **Fugo Labs**.
+
 Webapp, mit der Patientinnen und Patienten ihren Behandlungsplan fotografieren
 oder als PDF hochladen. Die Termine werden erkannt, einmal geprüft und liegen
 danach dauerhaft auf dem eigenen Gerät – ohne Anmeldung, ohne Server, ohne
@@ -55,6 +57,7 @@ Uhr „Guten Morgen“, bis 18:00 Uhr „Hallo“, danach „Guten Abend“.
 | `store.js` | Datenhaltung und Speicherung auf dem Gerät |
 | `parser.js` | Aus erkanntem Text wird ein Tagesplan |
 | `deskew.js` | Blatt im Foto finden und geradeziehen |
+| `pruefen.html` | Prüft nach dem Hochladen, ob alle Dateien angekommen sind |
 | `ocr.js` | Fotos und PDF-Dateien werden zu Text |
 | `ics.js` | Kalenderdatei für Apple, Google und Outlook |
 | `app.js` | Oberfläche und Ablauf |
@@ -146,13 +149,31 @@ gedruckt, wird von dort **kein** Datum mehr übernommen – dann bleibt das Feld
 leer und die Prüfansicht fordert zur Eingabe auf. Ein leeres Datumsfeld fällt
 beim Prüfen auf, ein falsches nicht.
 
+### Der nächste Termin
+
+Die wichtigste Information der App steht im blauen Kasten ganz oben. Maßgeblich
+ist dabei das **Ende** eines Termins, nicht sein Beginn: Wer um 09:10 auf das
+Telefon schaut, soll sehen, wo er gerade sein muss – nicht schon den
+übernächsten Termin. Läuft ein Termin, steht dort „Läuft gerade" und die
+verbleibende Zeit.
+
+Aktualisiert wird jeweils **zur vollen Minute**, nicht in einem festen
+60-Sekunden-Takt ab Seitenaufruf. Sonst springt die Anzeige bis zu 59 Sekunden
+zu spät um. Zusätzlich beim Zurückkehren zur Seite, denn auf dem Telefon stehen
+Zeitgeber im Hintergrund still.
+
 ### Wie falsch gelesene Namen korrigiert werden
 
 Behandlungspläne wiederholen dieselben Anwendungen, Räume und Namen über
 Wochen. Jeder bestätigte Eintrag wird gezählt und bildet ein Wörterbuch, das
 nur auf diesem Gerät liegt. Beim nächsten Scan wird jede Zelle dagegen
 abgeglichen: „Muler“ wird zu „Müller“, sobald „Müller“ einmal bestätigt wurde.
-Für Anwendungen gibt es zusätzlich eine Grundliste gängiger Reha-Leistungen.
+Für Anwendungen und Orte gibt es zusätzlich einen Grundwortschatz, damit schon
+der erste Scan sitzt. Die Texterkennung verliert regelmäßig Anfangsbuchstaben –
+aus „Sporthalle" wird „orthalle", aus „Haus" wird „Has". Dagegen hilft kein
+besseres Modell, sondern nur der Abgleich mit dem, was auf dem Plan überhaupt
+stehen kann. Mehrteilige Angaben werden zusätzlich Wort für Wort geprüft, damit
+auch „Treff orthalle" wieder zu „Treff Sporthalle" wird.
 
 Die Toleranz wächst mit der Wortlänge, bleibt aber eng genug, dass aus
 „Raum 2“ nie „Raum 5“ wird – Kandidaten mit abweichenden Ziffern werden gar
