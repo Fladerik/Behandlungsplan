@@ -105,31 +105,45 @@ async function getPdfjs() {
   return pdfjsPromise;
 }
 
-async function pdfPages(file, onPage) {
+/**
+ * Oeffnet ein PDF und liefert je Seite eine Aufgabe -- ohne sie schon zu
+ * zeichnen. Das Zeichnen passiert erst unmittelbar vor der Erkennung, damit
+ * nie mehr als eine Seite gleichzeitig im Speicher liegt.
+ */
+async function pdfTasks(file) {
   const pdfjs = await getPdfjs();
   const buffer = await file.arrayBuffer();
   const document_ = await pdfjs.getDocument({ data: buffer }).promise;
-  const pages = [];
+  const tasks = [];
   for (let number = 1; number <= document_.numPages; number += 1) {
-    onPage?.(number, document_.numPages);
-    const page = await document_.getPage(number);
+    tasks.push({
+      name: `${file.name} · Seite ${number}`,
+      async load() {
+        const page = await document_.getPage(number);
 
-    // Enthält das PDF bereits eine Textebene, ist sie jeder OCR überlegen.
-    const textContent = await page.getTextContent();
-    const embedded = textContent.items.map((item) => item.str).join(" ").trim();
-    if (embedded.length > 60) {
-      pages.push({ kind: "text", text: layoutText(textContent), tsv: "" });
-      continue;
-    }
+        // Enthaelt das PDF bereits eine Textebene, ist sie jeder OCR ueberlegen.
+        const textContent = await page.getTextContent();
+        const embedded = textContent.items.map((item) => item.str).join(" ").trim();
+        if (embedded.length > 60) return { kind: "text", text: layoutText(textContent) };
 
-    const viewport = page.getViewport({ scale: 2.2 });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-    pages.push({ kind: "canvas", canvas: enhance(canvas, canvas.width, canvas.height) });
+        const viewport = page.getViewport({ scale: 2.2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+        const enhanced = enhance(canvas, canvas.width, canvas.height);
+        release(canvas);
+        return { kind: "canvas", canvas: enhanced };
+      },
+    });
   }
-  return pages;
+  return tasks;
+}
+
+/** Gibt den Speicher eines Canvas sofort frei, statt auf den Sammler zu warten. */
+function release(canvas) {
+  canvas.width = 0;
+  canvas.height = 0;
 }
 
 /** Baut aus den PDF-Textelementen zeilenweisen Text mit erhaltenen Spaltenabständen. */
@@ -156,38 +170,53 @@ function layoutText(textContent) {
  * @returns {Promise<Array<{text: string, tsv: string, name: string}>>}
  */
 export async function readFiles(files, onProgress) {
-  const result = [];
   const report = (label, ratio) => onProgress?.({ label, ratio: Math.min(1, Math.max(0, ratio)) });
 
-  // Zuerst alle Seiten aufbereiten, damit die Fortschrittsanzeige stimmt.
-  const pages = [];
+  // Schritt 1: Aufgabenliste bilden, ohne Bilder zu erzeugen. Ein Handyfoto
+  // belegt aufbereitet gut 35 MB; sechs Seiten auf einmal im Speicher zu
+  // halten laesst die App auf dem Telefon abbrechen.
+  const tasks = [];
   for (const file of files) {
     if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
       report(`PDF wird geöffnet: ${file.name}`, 0.02);
-      const parts = await pdfPages(file, (number, total) => report(`Seite ${number} von ${total} wird aufbereitet …`, 0.05));
-      parts.forEach((part, index) => pages.push({ ...part, name: `${file.name} · Seite ${index + 1}` }));
+      tasks.push(...await pdfTasks(file));
     } else {
-      report(`Bild wird aufbereitet: ${file.name}`, 0.05);
-      const image = await loadImage(file);
-      pages.push({ kind: "canvas", canvas: enhance(image, image.naturalWidth, image.naturalHeight), name: file.name });
+      tasks.push({
+        name: file.name,
+        async load() {
+          const image = await loadImage(file);
+          return { kind: "canvas", canvas: enhance(image, image.naturalWidth, image.naturalHeight) };
+        },
+      });
     }
   }
 
-  const needOcr = pages.filter((page) => page.kind === "canvas");
-  let done = 0;
-  const worker = needOcr.length ? await getWorker() : null;
+  // Schritt 2: jede Seite einzeln aufbereiten, lesen und wieder freigeben.
+  const result = [];
+  let worker = null;
+  for (let index = 0; index < tasks.length; index += 1) {
+    const task = tasks[index];
+    const base = index / tasks.length;
+    const share = 1 / tasks.length;
 
-  for (const page of pages) {
+    report(`Seite ${index + 1} von ${tasks.length} wird aufbereitet …`, base + share * 0.15);
+    const page = await task.load();
+
     if (page.kind === "text") {
-      result.push({ text: page.text, tsv: "", name: page.name });
+      result.push({ text: page.text, tsv: "", name: task.name });
+      report(`Seite ${index + 1} von ${tasks.length} gelesen.`, base + share);
       continue;
     }
-    const share = 1 / needOcr.length;
-    report(`Seite wird gelesen … (${done + 1} von ${needOcr.length})`, 0.1 + done * share * 0.9);
-    const { data } = await worker.recognize(page.canvas, {}, { text: true, tsv: true });
-    result.push({ text: data.text || "", tsv: data.tsv || "", name: page.name });
-    done += 1;
-    report(`Seite gelesen (${done} von ${needOcr.length})`, 0.1 + done * share * 0.9);
+
+    worker ||= await getWorker();
+    report(`Seite ${index + 1} von ${tasks.length} wird gelesen …`, base + share * 0.35);
+    try {
+      const { data } = await worker.recognize(page.canvas, {}, { text: true, tsv: true });
+      result.push({ text: data.text || "", tsv: data.tsv || "", name: task.name });
+    } finally {
+      release(page.canvas);
+    }
+    report(`Seite ${index + 1} von ${tasks.length} gelesen.`, base + share);
   }
 
   report("Fertig gelesen.", 1);
