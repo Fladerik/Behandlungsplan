@@ -346,8 +346,17 @@ async function handleFiles(files) {
   } catch (error) {
     console.error(error);
     $("#review-progress").hidden = true;
-    $("#review-body").innerHTML = `<div class="notice conflict">Die Erkennung ist fehlgeschlagen: ${escapeHTML(error.message)}<br>
-      Termine lassen sich jederzeit auch von Hand über „+ Termin“ eintragen.</div>`;
+    const fehltAufServer = error.missing?.length || /Tesseract is not defined|Texterkennung fehlt/.test(error.message);
+    $("#review-body").innerHTML = fehltAufServer
+      ? `<div class="notice conflict">
+           <strong>Die Texterkennung ist auf dem Server nicht vollständig vorhanden.</strong>
+           <p>${escapeHTML(error.message)}</p>
+           <p>Beim Hochladen fehlen häufig die Unterordner <code>vendor</code> und <code>tessdata</code>
+              oder einzelne Dateien daraus – oft bricht die Übertragung mittendrin ab.</p>
+           <p><a href="./pruefen.html">Installation prüfen</a> zeigt Ihnen alle Dateien im Überblick.</p>
+         </div>`
+      : `<div class="notice conflict">Die Erkennung ist fehlgeschlagen: ${escapeHTML(error.message)}<br>
+           Termine lassen sich jederzeit auch von Hand über „+ Termin“ eintragen.</div>`;
   } finally {
     releaseWorker();
   }

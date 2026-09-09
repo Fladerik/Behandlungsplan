@@ -13,7 +13,7 @@ const VENDOR = "terminplan-vendor-v1";
 const SHELL_FILES = [
   "./", "./index.html", "./styles.css",
   "./app.js", "./store.js", "./parser.js", "./ocr.js", "./ics.js",
-  "./manifest.webmanifest", "./icon.svg",
+  "./manifest.webmanifest", "./icon.svg", "./pruefen.html",
 ];
 
 const VENDOR_FILES = [

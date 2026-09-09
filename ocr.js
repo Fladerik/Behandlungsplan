@@ -13,7 +13,36 @@ const TESS_OPTIONS = {
 
 let workerPromise = null;
 
+/**
+ * Prueft, ob die Texterkennung ueberhaupt geladen wurde.
+ *
+ * Fehlt der Ordner "vendor" auf dem Server -- der haeufigste Fehler beim
+ * Hochladen -- schlaegt das Skript im Seitenkopf still fehl und der Aufruf
+ * endet mit "Tesseract is not defined". Diese Meldung hilft niemandem,
+ * deshalb wird hier geprueft und im Klartext gesagt, was fehlt.
+ */
+async function ensureLibraries() {
+  if (typeof Tesseract !== "undefined") return;
+
+  const fehlend = [];
+  for (const datei of ["./vendor/tesseract.min.js", "./vendor/worker.min.js", "./tessdata/deu.traineddata.gz"]) {
+    try {
+      const antwort = await fetch(datei, { method: "HEAD" });
+      if (!antwort.ok) fehlend.push(`${datei} (Fehler ${antwort.status})`);
+    } catch {
+      fehlend.push(`${datei} (nicht erreichbar)`);
+    }
+  }
+
+  const fehler = new Error(fehlend.length
+    ? `Nicht gefunden: ${fehlend.join(", ")}.`
+    : "Die Dateien sind vorhanden, die Texterkennung ließ sich trotzdem nicht starten.");
+  fehler.missing = fehlend;
+  throw fehler;
+}
+
 async function getWorker(onProgress) {
+  await ensureLibraries();
   if (!workerPromise) {
     workerPromise = Tesseract.createWorker("deu", Tesseract.OEM.LSTM_ONLY, {
       ...TESS_OPTIONS,
