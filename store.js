@@ -201,7 +201,15 @@ export function putDay(iso, items, { mode = "replace", source = "Scan" } = {}) {
   return state.days[iso];
 }
 
-const fingerprint = (item) => `${item.time}|${item.title.toLocaleLowerCase("de-DE")}`;
+/**
+ * Erkennungsmerkmal fuer den Ergaenzen-Modus. Verglichen wird eine bereinigte
+ * Form, damit eine Verlesung ("Bewegı.ther.Sch.") nicht als eigener Termin
+ * neben dem korrekt gelesenen steht.
+ */
+const fingerprint = (item) => `${item.time}|${item.title
+  .toLocaleLowerCase("de-DE")
+  .replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss")
+  .replace(/[^a-z0-9]/g, "")}`;
 
 export function removeDay(iso) {
   delete state.days[iso];
@@ -263,11 +271,39 @@ function learnFrom(items) {
   }
 }
 
+/** Vergleichsform: Gross-/Kleinschreibung, Umlaute und Satzzeichen fallen weg. */
+const fold = (value) => value.toLocaleLowerCase("de-DE")
+  .replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss")
+  .replace(/[^a-z0-9]/g, "");
+
+/**
+ * Zeichen, die in deutschen Klinikplaenen nicht vorkommen, sind ein sicheres
+ * Zeichen fuer eine Verlesung ("Bewegı.ther.Sch." statt "Beweg.ther.Sch.").
+ */
+export const oddCharacters = (value) => (String(value).match(/[^A-Za-zÄÖÜäöüß0-9 .,:;/()+&-]/g) || []).length;
+
+/**
+ * Pro Begriff wird nur EINE Schreibweise gefuehrt. Sonst sammelt das
+ * Woerterbuch Verlesungsvarianten an und normalisiert spaeter womoeglich
+ * auf die falsche davon. Die sauberere Schreibweise setzt sich durch.
+ */
 function countTerm(field, value) {
   const term = (value || "").trim();
   if (term.length < 3) return;
   const bucket = (state.lexicon[field] ||= {});
-  bucket[term] = (bucket[term] || 0) + 1;
+  const key = fold(term);
+  const known = Object.keys(bucket).find((entry) => fold(entry) === key);
+
+  if (!known) { bucket[term] = 1; return; }
+  if (known === term) { bucket[term] += 1; return; }
+
+  const count = bucket[known] + 1;
+  if (oddCharacters(term) < oddCharacters(known)) {
+    delete bucket[known];
+    bucket[term] = count;
+  } else {
+    bucket[known] = count;
+  }
 }
 
 export const getLexicon = () => state.lexicon;

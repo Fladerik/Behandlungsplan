@@ -1,21 +1,21 @@
 /**
- * Aus einem OCR-Ergebnis wird ein Tagesplan.
+ * Aus einem OCR-Ergebnis werden Tagesplaene.
  *
- * Der frühere Ansatz hat globale Spaltengrenzen aus gefundenen Überschriften
- * geraten. Fehlte eine Überschrift oder war sie verlesen, rutschten alle
- * Spalten -- daraus entstanden falsche Namen und leere Titel.
+ * Zwei Erkenntnisse aus echten Klinikplaenen bestimmen den Aufbau:
  *
- * Dieser Parser arbeitet zeilenweise:
- *   1. Wörter werden zu Zeilen gruppiert (das ist die stabilste OCR-Information).
- *   2. Innerhalb einer Zeile trennen die tatsächlichen Wortabstände die Zellen.
- *   3. Jede Zelle wird inhaltlich eingeordnet (Ort? Person? Anwendung?),
- *      nicht über ihre x-Position.
- *   4. Bekannte Begriffe aus früheren, bestätigten Plänen korrigieren Verlesungen.
+ * 1. Eine Seite enthaelt nicht einen Tag, sondern beliebig viele. Die Tage
+ *    werden durch Datumszeilen im Tabellenkoerper getrennt ("Freitag 04.
+ *    September 2026"). Das Datum im Seitenkopf ist das Anreisedatum und
+ *    waere fuer die Termine falsch.
+ *
+ * 2. Hat der Plan eine Spaltenueberschrift, ist die Spaltenposition das
+ *    verlaesslichste Signal ueberhaupt. Nur wenn sie fehlt oder unplausibel
+ *    ist, wird jede Zelle inhaltlich eingeordnet.
  */
 
-import { CATEGORIES } from "./store.js";
+import { CATEGORIES, oddCharacters } from "./store.js";
 
-/* ------------------------------------------------------------- Wörterbücher */
+/* ------------------------------------------------------------- Woerterbuecher */
 
 const MONTHS = {
   januar: 1, jan: 1, februar: 2, feb: 2, "märz": 3, maerz: 3, mrz: 3, april: 4, apr: 4,
@@ -23,37 +23,59 @@ const MONTHS = {
   oktober: 10, okt: 10, november: 11, nov: 11, dezember: 12, dez: 12,
 };
 
+const MONTH_NAMES = "januar|jan|februar|feb|märz|maerz|mrz|april|apr|mai|juni|jun|juli|jul|august|aug|september|sept|sep|oktober|okt|november|nov|dezember|dez";
 const WEEKDAYS = ["sonntag", "montag", "dienstag", "mittwoch", "donnerstag", "freitag", "samstag"];
+const WEEKDAY_PATTERN = /(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonnabend|sonntag)/i;
 
-// Ein Ort beginnt typischerweise mit einem Ortswort ("Raum 214", "Haus 2")
-// oder ist ein einzelnes zusammengesetztes Wort ("Speisesaal", "Turnhalle").
-const LOCATION_START = /^(raum|zimmer|halle|bad|becken|kabine|station|geb\u00e4ude|gebaeude|haus|saal|treffpunkt|therapiezentrum|bewegungsbad|ebene|stock|etage|flur|trakt|praxis|ambulanz|turnhalle|gymnastikraum|wartebereich|empfang|foyer|liegehalle|sauna|schwimmbad|speisesaal|aufenthaltsraum|schulungsraum|sporthalle|lehrk\u00fcche)\b/i;
+/** Spaltenueberschriften und die Rolle, die sie bezeichnen. */
+const COLUMN_ROLES = [
+  { role: "time", pattern: /^(zeit|uhrzeit|beginn|von|termin)\b/i },
+  { role: "location", pattern: /^(haus|geb[äa]ude|bereich|klinik|standort)\b/i },
+  { role: "location", pattern: /^(behandlungsstelle|ort|raum|zimmer|stelle|wo)\b/i },
+  { role: "title", pattern: /^(heilmittel|anwendung|therapie|behandlung|leistung|ma[ßs]nahme|inhalt|was)\b/i },
+  { role: "practitioner", pattern: /^(behandler|therapeut|durchf[üu]hrung|wer|personal)\b/i },
+];
 
-const LOCATION_SUFFIX = /(raum|saal|halle|zimmer|bad|becken|kabine|studio|k\u00fcche|garten|terrasse|bereich|platz)$/i;
+const LOCATION_START = /^(raum|zimmer|halle|bad|becken|kabine|station|geb[äa]ude|haus|saal|treffpunkt|therapiezentrum|therapeutikum|bewegungsbad|ebene|stock|etage|og|ug|eg|flur|trakt|praxis|ambulanz|turnhalle|gymnastikraum|wartebereich|empfang|foyer|liegehalle|sauna|schwimmbad|speisesaal|aufenthaltsraum|schulungsraum|sporthalle|lehrküche|patientenzimmer|fernsehgerät|mtz|physio)\b/i;
 
-// Zellen mit einem Behandlungsbegriff sind niemals Ortsangaben --
-// sonst landet "Krankengymnastik im Bewegungsbad" in der Ortsspalte.
-const TREATMENT_HINT = /(therapie|training|gymnastik|massage|packung|beratung|vortrag|schulung|gespr\u00e4ch|visite|untersuchung|drainage|anwendung|kurs|essen|walking|schwimmen|entspannung|inhalation)/i;
+const LOCATION_SUFFIX = /(raum|saal|halle|zimmer|bad|becken|kabine|studio|küche|garten|terrasse|bereich|platz|therapeutikum)$/i;
 
-const ROOM_CODE = /^(?:[A-Z\u00c4\u00d6\u00dc]{1,3}[-\s]?\d{1,3}[a-z]?|\d{1,3}[a-z]?)$/;
+const TREATMENT_HINT = /(therapie|training|gymnastik|massage|packung|beratung|vortrag|schulung|gespräch|visite|untersuchung|drainage|anwendung|kurs|essen|frühstück|walking|schwimmen|entspannung|inhalation|mobilisieren|dehnen)/i;
 
-const TITLE_PREFIX = /\b(dr|dr\.|prof|prof\.|frau|herr|hr|fr|dipl|med|univ)\b/i;
+const ROOM_CODE = /^(?:[A-ZÄÖÜ]{1,3}[-\s]?\d{1,3}[a-z]?|\d{1,3}[a-z]?)$/;
 
-/** Anwendungen, die auf Reha-Plänen im deutschsprachigen Raum üblich sind. */
+/**
+ * Ein Umbruch innerhalb einer Tabellenzelle klebt an der Zeile darueber;
+ * eine neue Tabellenzeile ist durch das Zellpolster deutlich weiter entfernt.
+ * Gemessen an echten Plaenen: Umbruch rund 0,3, neue Zeile ab 0,65.
+ */
+const CONTINUATION_GAP = 0.45;
+
+/** "2.0G" und "2.O0G" sind verlesene Etagenangaben -- ein haeufiger OCR-Fehler. */
+function tidyLocation(value) {
+  return clean(String(value)
+    .replace(/(\d)\s*\.?\s*[O0]{1,2}G\b/gi, "$1. OG")
+    .replace(/(\d)\s*\.?\s*[U][G]\b/gi, "$1. UG"));
+}
+
+const TITLE_PREFIX = /\b(dr|prof|frau|herr|hr|fr|dipl|med)\b\.?/i;
+
+/** Anwendungen, die auf Reha-Plaenen im deutschsprachigen Raum ueblich sind. */
 const KNOWN_TREATMENTS = [
   "Krankengymnastik", "Krankengymnastik im Bewegungsbad", "Bewegungsbad", "Wassergymnastik",
   "Aquajogging", "Medizinische Trainingstherapie", "Gerätetraining", "Ergometertraining",
   "Nordic Walking", "Terraintraining", "Wirbelsäulengymnastik", "Rückenschule",
   "Atemtherapie", "Ergotherapie", "Physiotherapie", "Manuelle Therapie", "Manuelle Lymphdrainage",
   "Klassische Massage", "Teilmassage", "Unterwasserdruckstrahlmassage", "Bindegewebsmassage",
-  "Fangopackung", "Moorpackung", "Naturmoorbad", "Heißluft", "Rotlicht", "Kryotherapie",
+  "Fangopackung", "Fango", "Moorpackung", "Naturmoorbad", "Heißluft", "Rotlicht", "Kryotherapie",
   "Elektrotherapie", "Ultraschall", "Inhalation", "Kohlensäurebad", "Solebad", "Vierzellenbad",
   "Stangerbad", "Kneippanwendung", "Wechselbad", "Entspannungstraining", "Progressive Muskelentspannung",
   "Autogenes Training", "Yoga", "Qigong", "Tai Chi", "Rückenkurs", "Gesundheitsvortrag",
-  "Ernährungsberatung", "Ernährungsvortrag", "Lehrküche", "Diätberatung", "Sozialberatung",
+  "Ernährungsberatung", "Info Ernährung", "Lehrküche", "Diätberatung", "Sozialberatung",
   "Psychologisches Einzelgespräch", "Gesprächsgruppe", "Schulung", "Visite", "Arztgespräch",
   "Aufnahmeuntersuchung", "Abschlussuntersuchung", "Blutentnahme", "Belastungs-EKG", "EKG",
-  "Lungenfunktion", "Röntgen", "Ultraschalluntersuchung", "Sprechstunde",
+  "Lungenfunktion", "Röntgen", "Sprechstunde", "Dehnen/Mobilisieren", "Schmerzbewältigung",
+  "Gelenkarthrose", "Fitness und Bewegung", "MTT Einführung", "KG einzel",
   "Frühstück", "Mittagessen", "Abendessen", "Zwischenmahlzeit", "Anreise", "Abreise",
 ];
 
@@ -61,11 +83,11 @@ const KNOWN_TREATMENTS = [
 // Bewegung steht vor Massage, damit "Krankengymnastik im Bewegungsbad"
 // nicht wegen des Wortteils "bad" als Anwendung einsortiert wird.
 const CATEGORY_RULES = [
-  { id: "essen", pattern: /(fr\u00fchst\u00fcck|fruehstueck|mittagessen|abendessen|mahlzeit|lehrk\u00fcche|kaffeetafel)/i },
-  { id: "medizin", pattern: /(visite|arzt|\u00e4rztlich|aerztlich|untersuchung|\bekg\b|labor|blutentnahme|r\u00f6ntgen|sonograf|sonograph|lungenfunktion|sprechstunde|aufnahmegespr\u00e4ch|abschlussgespr\u00e4ch|befund|diagnos)/i },
-  { id: "bewegung", pattern: /(gymnastik|training|sport|walking|schwimm|bewegungsbad|aquajogging|ergometer|fahrrad|terrain|wandern|yoga|qigong|tai\s?chi|physiotherapie|krankengymnastik|manuelle\s+therapie|ergotherapie|atemtherapie|r\u00fcckenschule|muskelentspannung)/i },
-  { id: "massage", pattern: /(massage|packung|fango|moor|lymphdrainage|hei\u00dfluft|heissluft|rotlicht|wickel|b\u00fcrstenbad|kryo|elektrotherapie|ultraschall|stangerbad|vierzellenbad|inhalation|\bbad\b|\bb\u00e4der\b|solebad|kohlens\u00e4ure)/i },
-  { id: "beratung", pattern: /(beratung|vortrag|schulung|seminar|gespr\u00e4ch|gruppe|psycholog|sozialdienst|ern\u00e4hrung|di\u00e4t|entspannung|autogenes|information|einf\u00fchrung)/i },
+  { id: "essen", pattern: /(frühstück|fruehstueck|mittagessen|abendessen|mahlzeit|lehrküche|kaffeetafel|essensausgabe)/i },
+  { id: "medizin", pattern: /(visite|arzt|ärztlich|untersuchung|\bekg\b|labor|blutentnahme|röntgen|sonograf|lungenfunktion|sprechstunde|aufnahmegespräch|abschlussgespräch|befund|diagnos|arthrose|schmerzbewältigung)/i },
+  { id: "bewegung", pattern: /(gymnastik|training|sport|walking|schwimm|bewegungsbad|aquajogging|ergometer|fahrrad|terrain|wandern|yoga|qigong|tai\s?chi|physiotherapie|krankengymnastik|manuelle\s+therapie|ergotherapie|atemtherapie|rückenschule|muskelentspannung|mobilisieren|dehnen|mobi\b|beweg|\bkg\b|\bmtt\b|fitness)/i },
+  { id: "massage", pattern: /(massage|packung|fango|moor|lymphdrainage|heißluft|rotlicht|wickel|kryo|elektrotherapie|ultraschall|stangerbad|vierzellenbad|inhalation|\bbad\b|solebad|kohlensäure)/i },
+  { id: "beratung", pattern: /(beratung|vortrag|schulung|seminar|gespräch|gruppe|psycholog|sozialdienst|ernährung|diät|entspannung|autogenes|information|\binfo\b|einführung)/i },
 ];
 
 /* ----------------------------------------------------------------- Basics */
@@ -79,20 +101,19 @@ const clean = (value = "") => String(value)
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
 export function categorize(title = "", note = "") {
-  const text = `${title} ${note}`;
-  const hit = CATEGORY_RULES.find((rule) => rule.pattern.test(text));
+  const hit = CATEGORY_RULES.find((rule) => rule.pattern.test(`${title} ${note}`));
   return hit ? hit.id : "sonstiges";
 }
 
 export const categoryLabel = (id) => CATEGORIES.find((entry) => entry.id === id)?.label || "Sonstiges";
 
-/** OCR verwechselt Ziffern regelmäßig mit Buchstaben -- hier gezielt zurückdrehen. */
+/** OCR verwechselt Ziffern regelmaessig mit Buchstaben -- hier gezielt zurueckdrehen. */
 export function normalizeTime(raw = "") {
   const candidate = String(raw)
-    .replace(/[oO°]/g, "0").replace(/[lI|]/g, "1").replace(/[sS]/g, "5").replace(/[B]/g, "8")
+    .replace(/[oO°]/g, "0").replace(/[lI|]/g, "1").replace(/[sS]/g, "5").replace(/B/g, "8")
     .replace(/\s+/g, "")
     .replace(/[.,;]/g, ":")
-    .replace(/^(\d{1,2}):?(\d{2})(?:uhr)?$/i, "$1:$2");
+    .replace(/uhr$/i, "");
   const match = candidate.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return "";
   const hours = Number(match[1]);
@@ -101,44 +122,38 @@ export function normalizeTime(raw = "") {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+const iso = (year, month, day) =>
+  (!year || !month || !day || month > 12 || day > 31) ? "" : `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
 export function parseGermanDate(text, fallbackYear = new Date().getFullYear()) {
   const source = String(text || "");
+  const written = source.toLocaleLowerCase("de-DE")
+    .match(new RegExp(`\\b([0-3]?\\d)\\.?\\s*(${MONTH_NAMES})\\.?\\s*((?:20)?\\d{2})?`));
+  if (written) {
+    const rawYear = written[3];
+    const year = rawYear ? (rawYear.length === 2 ? Number(`20${rawYear}`) : Number(rawYear)) : fallbackYear;
+    return iso(year, MONTHS[written[2]], Number(written[1]));
+  }
   const numeric = source.match(/\b([0-3]?\d)\s*[.\/-]\s*([01]?\d)\s*[.\/-]\s*((?:20)?\d{2})\b/);
   if (numeric) {
     const year = numeric[3].length === 2 ? Number(`20${numeric[3]}`) : Number(numeric[3]);
     return iso(year, Number(numeric[2]), Number(numeric[1]));
   }
-  const written = source.toLocaleLowerCase("de-DE")
-    .match(/\b([0-3]?\d)\.?\s*(januar|jan|februar|feb|märz|maerz|mrz|april|apr|mai|juni|jun|juli|jul|august|aug|september|sept|sep|oktober|okt|november|nov|dezember|dez)\.?\s*((?:20)?\d{2})?/);
-  if (written) {
-    const month = MONTHS[written[2]];
-    const rawYear = written[3];
-    const year = rawYear ? (rawYear.length === 2 ? Number(`20${rawYear}`) : Number(rawYear)) : fallbackYear;
-    return iso(year, month, Number(written[1]));
-  }
   const short = source.match(/\b([0-3]?\d)\s*\.\s*([01]?\d)\s*\.(?!\d)/);
-  if (short) return iso(fallbackYear, Number(short[2]), Number(short[1]));
-  return "";
+  return short ? iso(fallbackYear, Number(short[2]), Number(short[1])) : "";
 }
 
-function iso(year, month, day) {
-  if (!year || !month || !day || month > 12 || day > 31) return "";
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
+export const weekdayOf = (isoDate) => WEEKDAYS[new Date(`${isoDate}T12:00:00`).getDay()];
 
-export function weekdayOf(isoDate) {
-  return WEEKDAYS[new Date(`${isoDate}T12:00:00`).getDay()];
-}
-
-/** Prüft, ob im Text ein Wochentag steht, der zum erkannten Datum passt. */
+/** Prueft, ob ein im Text genannter Wochentag zum erkannten Datum passt. */
 export function dateMatchesWeekday(isoDate, text) {
-  const lower = String(text).toLocaleLowerCase("de-DE");
-  const named = WEEKDAYS.find((day) => lower.includes(day) || lower.includes(day.slice(0, 2) + "."));
+  const named = String(text).toLocaleLowerCase("de-DE").match(WEEKDAY_PATTERN);
   if (!named || !isoDate) return null;
-  return named === weekdayOf(isoDate);
+  const day = named[1] === "sonnabend" ? "samstag" : named[1];
+  return day === weekdayOf(isoDate);
 }
 
-/* ------------------------------------------------- Ähnlichkeit / Lexikon */
+/* ------------------------------------------------- Aehnlichkeit / Lexikon */
 
 function levenshtein(a, b) {
   if (a === b) return 0;
@@ -160,17 +175,19 @@ const foldForCompare = (value) => value.toLocaleLowerCase("de-DE")
   .replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
 
 /**
- * Sucht den ähnlichsten bekannten Begriff. Toleranz wächst mit der Wortlänge,
- * bleibt aber eng genug, dass "Bad 2" nicht zu "Bad 3" wird.
+ * Sucht den aehnlichsten bekannten Begriff. Die Toleranz waechst mit der
+ * Wortlaenge, bleibt aber eng genug, dass aus "Raum 2" nie "Raum 5" wird.
  */
 export function bestMatch(value, candidates) {
   const needle = foldForCompare(value);
   if (needle.length < 4) return null;
+  // Zahlen unterscheiden Raeume voneinander: nur Kandidaten mit denselben Ziffern.
+  const digits = needle.replace(/\D/g, "");
   const budget = needle.length <= 6 ? 1 : needle.length <= 12 ? 2 : 3;
   let best = null;
   for (const candidate of candidates) {
     const hay = foldForCompare(candidate);
-    if (!hay) continue;
+    if (!hay || hay.replace(/\D/g, "") !== digits) continue;
     if (hay === needle) return { value: candidate, distance: 0 };
     if (Math.abs(hay.length - needle.length) > budget) continue;
     const distance = levenshtein(needle, hay);
@@ -179,42 +196,44 @@ export function bestMatch(value, candidates) {
   return best;
 }
 
-/**
- * Korrigiert einen erkannten Text gegen bekannte Begriffe.
- * Gibt zusätzlich zurück, ob korrigiert wurde -- die Prüfansicht markiert das.
- */
+/** Korrigiert einen erkannten Text gegen bekannte Begriffe. */
 export function correct(value, field, lexicon = {}) {
   const text = clean(value);
   if (!text) return { value: "", corrected: false };
   const learned = Object.entries(lexicon[field] || {}).sort((a, b) => b[1] - a[1]).map(([term]) => term);
   const pool = field === "title" ? [...learned, ...KNOWN_TREATMENTS] : learned;
   const match = bestMatch(text, pool);
-  if (match && match.distance > 0) return { value: match.value, corrected: true, from: text };
-  return { value: text, corrected: false };
+  if (!match || match.value === text) return { value: text, corrected: false };
+
+  // Bei echtem Abstand gewinnt der bekannte Begriff -- das ist der Zweck des
+  // Woerterbuchs. Sind beide Schreibweisen dagegen nach der Normalisierung
+  // gleich ("Bewegı.ther.Sch." und "Beweg.ther.Sch."), entscheidet nicht das
+  // Alter des Eintrags, sondern welche Fassung weniger Fremdzeichen enthaelt.
+  const winner = match.distance > 0 || oddCharacters(match.value) <= oddCharacters(text)
+    ? match.value
+    : text;
+  return winner === text
+    ? { value: text, corrected: false }
+    : { value: winner, corrected: true, from: text };
 }
 
 /* ------------------------------------------------------- TSV -> Textzeilen */
 
 function tsvLines(tsv) {
-  const rows = String(tsv || "").split(/\r?\n/).slice(1);
   const groups = new Map();
-  for (const row of rows) {
+  for (const row of String(tsv || "").split(/\r?\n/).slice(1)) {
     const cells = row.split("\t");
     if (cells.length < 12 || cells[0] !== "5") continue;
     const text = clean(cells.slice(11).join("\t"));
     const confidence = Number(cells[10]);
     if (!text || !(confidence > 20)) continue;
     const key = `${cells[1]}-${cells[2]}-${cells[3]}-${cells[4]}`;
-    const word = {
-      text,
-      confidence,
-      left: Number(cells[6]),
-      top: Number(cells[7]),
-      width: Number(cells[8]),
-      height: Number(cells[9]),
-    };
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(word);
+    groups.get(key).push({
+      text, confidence,
+      left: Number(cells[6]), top: Number(cells[7]),
+      width: Number(cells[8]), height: Number(cells[9]),
+    });
   }
   return [...groups.values()]
     .map((words) => {
@@ -224,6 +243,7 @@ function tsvLines(tsv) {
         top: Math.min(...words.map((word) => word.top)),
         bottom: Math.max(...words.map((word) => word.top + word.height)),
         left: words[0].left,
+        right: words.at(-1).left + words.at(-1).width,
         height: Math.max(...words.map((word) => word.height)),
         text: words.map((word) => word.text).join(" "),
         confidence: Math.round(words.reduce((sum, word) => sum + word.confidence, 0) / words.length),
@@ -234,42 +254,9 @@ function tsvLines(tsv) {
 }
 
 /**
- * Holt die führende Uhrzeit aus einer Zeile ("08:30", "09:15 - 10:00", "9.15 Uhr").
- * Bewusst wortweise statt über Spaltenpositionen: stehen Zeit- und Hausspalte
- * eng beieinander, verschmelzen sie sonst zu einer Zelle und die Zeit geht verloren.
- */
-function extractTime(words) {
-  const first = words[0]?.text || "";
-
-  // Häufigster Fall bei Tabellen: die Texterkennung liefert die ganze Spanne
-  // als ein Wort ("09:15-10:00"). Das zuerst prüfen.
-  const span = first.split(/[-\u2013\u2014]/);
-  if (span.length === 2) {
-    const from = normalizeTime(span[0]);
-    const to = normalizeTime(span[1]);
-    if (from) return { time: from, end: to, rest: words.slice(/^uhr$/i.test(words[1]?.text || "") ? 2 : 1) };
-  }
-
-  const time = normalizeTime(first);
-  if (!time) return null;
-  let used = 1;
-  let end = "";
-  const second = words[1]?.text || "";
-  if (/^[-–]$/.test(second)) {
-    end = normalizeTime(words[2]?.text || "");
-    if (end) used = 3;
-  } else if (/^[-–]/.test(second)) {
-    end = normalizeTime(second.replace(/^[-–]\s*/, ""));
-    if (end) used = 2;
-  }
-  if (/^uhr$/i.test(words[used]?.text || "")) used += 1;
-  return { time, end, rest: words.slice(used) };
-}
-
-/**
- * Zerlegt eine Zeile an den tatsächlichen Lücken zwischen den Wörtern.
- * Der Schwellwert leitet sich aus der Schrifthöhe ab und funktioniert damit
- * unabhängig von Auflösung und Zoom.
+ * Zerlegt eine Zeile an den tatsaechlichen Luecken zwischen den Woertern.
+ * Der Schwellwert leitet sich aus der Schrifthoehe ab und funktioniert damit
+ * unabhaengig von Aufloesung und Zoomstufe.
  */
 function splitCells(words, height) {
   if (!words.length) return [];
@@ -279,8 +266,7 @@ function splitCells(words, height) {
   for (let index = 1; index < words.length; index += 1) {
     const previous = words[index - 1];
     const word = words[index];
-    const gap = word.left - (previous.left + previous.width);
-    if (gap > gapLimit) {
+    if (word.left - (previous.left + previous.width) > gapLimit) {
       cells.push(current);
       current = [];
     }
@@ -288,21 +274,99 @@ function splitCells(words, height) {
   }
   cells.push(current);
   return cells
-    .map((words) => ({
-      text: clean(words.map((word) => word.text).join(" ")),
-      left: words[0].left,
-      right: words.at(-1).left + words.at(-1).width,
-      confidence: Math.round(words.reduce((sum, word) => sum + word.confidence, 0) / words.length),
+    .map((group) => ({
+      text: clean(group.map((word) => word.text).join(" ")),
+      left: group[0].left,
+      right: group.at(-1).left + group.at(-1).width,
+      confidence: Math.round(group.reduce((sum, word) => sum + word.confidence, 0) / group.length),
     }))
     .filter((cell) => cell.text);
 }
 
-/* --------------------------------------------------- Zellen einordnen */
+/* ------------------------------------------------------- Zeilen einordnen */
 
-const isHeaderLine = (text) => /^(uhrzeit|zeit|beginn|von|bis|anwendung|therapie|behandlung|heilmittel|leistung|ort|raum|haus|behandlungsstelle|therapeut|behandler|durchführung|bemerkung|hinweis)\b/i.test(text)
-  || /(behandlungsplan|therapieplan|tagesplan|wochenplan)/i.test(text)
-  || /^(patient|name|geb\.?|geburtsdatum|station|zimmer\s*nr|seite\s*\d)/i.test(text)
+/** Wiederkehrender Seitenkopf, Fusszeile und Stammdaten -- nie ein Termin. */
+const isChrome = (text) => /^(behandlungsplan|therapieplan|tagesplan|wochenplan|seite\s|zuletzt gedruckt|patientennummer|zimmernummer|kostenträger|anreise|abreise|patient|name|geb\.?|vielen dank|sehr geehrte)/i.test(text)
   || /^[\s\-_=.,:•]+$/.test(text);
+
+/** Erlaeuterungen zwischen den Terminen. Sie enthalten oft selbst Uhrzeiten. */
+const isNoteLine = (text) => /^(bitte|wir bitten|hinweis|achtung|öffnungszeiten|nach dem erhalt|wasserspuren|sprechzeiten|den internen|therapeutikum oder|an der kasse|pfandquittung|zimmer ein|raum geöffnet|gewährleistet|dar$|12 uhr|und davon|diesen terminen|rechter schalter)/i.test(text.trim());
+
+const isColumnHeading = (text) => COLUMN_ROLES.some((entry) => entry.pattern.test(text.trim()));
+
+/** "Donnerstag 03. September 2026" -- eine Zeile, die nur einen Tag benennt. */
+function dayHeadingDate(line, fallbackYear) {
+  const text = clean(line.text);
+  if (!WEEKDAY_PATTERN.test(text)) return "";
+  if (/\d{1,2}\s*[:.]\s*\d{2}/.test(text)) return "";   // enthaelt eine Uhrzeit -> Hinweis
+  if (text.length > 46) return "";
+  const date = parseGermanDate(text, fallbackYear);
+  if (!date) return "";
+  return dateMatchesWeekday(date, text) === false ? "" : date;
+}
+
+/* --------------------------------------------- Spalten aus der Ueberschrift */
+
+/**
+ * Sucht die Spaltenueberschrift und leitet daraus die Spaltenanker ab.
+ * Ist eine vorhanden, ist die Position das verlaesslichste Signal, das ein
+ * Plan hergibt -- die Klinik druckt jeden Tag dieselbe Tabelle.
+ */
+function findColumns(lines) {
+  for (const line of lines) {
+    const cells = splitCells(line.words, line.height);
+    if (cells.length < 3) continue;
+    const roles = cells.map((cell) => COLUMN_ROLES.find((entry) => entry.pattern.test(cell.text))?.role || null);
+    const named = roles.filter(Boolean).length;
+    // Mindestens drei erkannte Ueberschriften, und die Zeitspalte muss dabei sein.
+    if (named < 3 || named < cells.length - 1 || roles[0] !== "time") continue;
+    return {
+      top: line.bottom,
+      anchors: cells.map((cell, index) => ({ role: roles[index], left: cell.left, right: cell.right })),
+    };
+  }
+  return null;
+}
+
+/**
+ * Ordnet eine Zelle der Spalte zu, deren Bereich ihre linke Kante trifft,
+ * und liefert deren Index. Der Index zaehlt, nicht nur die Rolle: "Haus" und
+ * "Behandlungsstelle" sind beide Ortsangaben, aber getrennte Spalten -- eine
+ * Fortsetzungszeile muss in genau ihre eigene zurueckfinden.
+ */
+function columnIndexAt(anchors, cell) {
+  let chosen = 0;
+  for (let index = 0; index < anchors.length; index += 1) {
+    // Toleranz nach links, weil Zellinhalte etwas vor der Ueberschrift beginnen.
+    if (cell.left >= anchors[index].left - 24) chosen = index;
+  }
+  return chosen;
+}
+
+/** Fuegt die Spalten-Slots zu den Feldern eines Termins zusammen. */
+function slotsToFields(slots, anchors) {
+  const pick = (role) => anchors
+    .map((anchor, index) => (anchor.role === role ? clean((slots[index] || []).join(" ")) : ""))
+    .filter(Boolean);
+  return {
+    title: pick("title").join(" "),
+    location: pick("location").join(", "),
+    practitioner: pick("practitioner").join(" "),
+    note: pick(null).join(" · "),
+    byColumn: true,
+  };
+}
+
+function assignByColumns(cells, anchors) {
+  const slots = [];
+  for (const cell of cells) {
+    const index = columnIndexAt(anchors, cell);
+    (slots[index] ||= []).push(cell.text);
+  }
+  return { slots, ...slotsToFields(slots, anchors) };
+}
+
+/* ------------------------------------------- Zellen inhaltlich einordnen */
 
 function looksLikeLocation(text) {
   const value = text.trim();
@@ -310,103 +374,202 @@ function looksLikeLocation(text) {
   const words = value.split(/\s+/);
   if (words.length > 4) return false;
   if (ROOM_CODE.test(value)) return true;
-  // Beginnt die Angabe mit einem Ortswort, ist das eindeutig -- auch bei
-  // "Schulungsraum 3", das sonst am Wortteil "Schulung" hängen bliebe.
   if (LOCATION_START.test(value)) return true;
   if (TREATMENT_HINT.test(value)) return false;
-  // Die Endung allein reicht nur bei sehr kurzen Angaben.
   return words.length <= 2 && LOCATION_SUFFIX.test(value);
 }
 
-/** Personennamen: "Müller", "Dr. Weber", "Schmidt, A.", "M. Bauer" -- kurz, ohne Verben. */
+/** Personennamen: "Müller", "Dr. Weber", "Frau M. Stubenrauch". */
 function looksLikePerson(text) {
   const value = text.trim();
-  if (!value || value.length > 34) return false;
-  if (looksLikeLocation(value)) return false;
+  if (!value || value.length > 34 || looksLikeLocation(value)) return false;
   if (TITLE_PREFIX.test(value)) return true;
   const words = value.split(/\s+/);
   if (words.length > 3) return false;
   const capitalised = words.filter((word) => /^[A-ZÄÖÜ][a-zäöüß'-]+\.?$/.test(word) || /^[A-ZÄÖÜ]\.$/.test(word));
-  if (capitalised.length !== words.length) return false;
-  // Anwendungsnamen sind meist zusammengesetzt und lang; Nachnamen sind kurz.
-  return words.every((word) => word.length <= 16) && !/(therapie|training|gymnastik|massage|bad|packung|beratung|vortrag|essen)/i.test(value);
+  return capitalised.length === words.length
+    && words.every((word) => word.length <= 16)
+    && !TREATMENT_HINT.test(value);
 }
 
-function assignCells(cells, lexicon) {
+/** Rueckfallebene ohne Spaltenueberschrift: jede Zelle wird inhaltlich eingeordnet. */
+function assignByContent(cells, lexicon) {
   const rest = [...cells];
   const known = (field, value) => {
     const match = bestMatch(value, Object.keys(lexicon[field] || {}));
     return Boolean(match && match.distance <= 1);
   };
-
   const takeBy = (test) => {
     const index = rest.findIndex((cell) => test(cell.text));
     return index >= 0 ? rest.splice(index, 1)[0].text : "";
   };
 
-  // Was das Lexikon sicher kennt, wird zuerst zugeordnet; danach die Textmerkmale.
   let practitioner = takeBy((text) => known("practitioner", text));
 
   const locations = [];
-  let hit = takeBy((text) => known("location", text));
-  while (hit) { locations.push(hit); hit = takeBy((text) => known("location", text)); }
-  hit = takeBy(looksLikeLocation);
-  while (hit) { locations.push(hit); hit = takeBy(looksLikeLocation); }
-
-  if (!practitioner && rest.length > 1) {
-    // Der Behandler steht praktisch immer in der letzten Spalte.
-    const last = rest.at(-1);
-    if (last && looksLikePerson(last.text)) practitioner = rest.pop().text;
+  for (const test of [(text) => known("location", text), (text) => looksLikeLocation(text)]) {
+    let hit = takeBy(test);
+    while (hit) { locations.push(hit); hit = takeBy(test); }
   }
 
-  const byLength = [...rest].sort((a, b) => b.text.length - a.text.length);
-  const title = byLength[0]?.text || "";
-  const note = rest.filter((cell) => cell.text !== title).map((cell) => cell.text).join(" \u00b7 ");
-  return { title, location: locations.join(", "), practitioner, note };
+  if (!practitioner && rest.length > 1 && looksLikePerson(rest.at(-1).text)) practitioner = rest.pop().text;
+
+  const title = [...rest].sort((a, b) => b.text.length - a.text.length)[0]?.text || "";
+  const note = rest.filter((cell) => cell.text !== title).map((cell) => cell.text).join(" · ");
+  return { title, location: locations.join(", "), practitioner, note, byColumn: false };
+}
+
+/* ------------------------------------------------------- Zeit aus der Zeile */
+
+function extractTime(words) {
+  const first = words[0]?.text || "";
+
+  // Haeufigster Fall bei Tabellen: die Texterkennung liefert die ganze Spanne
+  // als ein Wort ("09:15-10:00").
+  const span = first.split(/[-–—]/);
+  if (span.length === 2) {
+    const from = normalizeTime(span[0]);
+    if (from) return { time: from, end: normalizeTime(span[1]), rest: words.slice(1) };
+  }
+
+  const time = normalizeTime(first);
+  if (!time) return null;
+  let used = 1;
+  let end = "";
+  const second = words[1]?.text || "";
+  if (/^[-–—]$/.test(second)) {
+    end = normalizeTime(words[2]?.text || "");
+    if (end) used = 3;
+  } else if (/^[-–—]/.test(second)) {
+    end = normalizeTime(second.replace(/^[-–—]\s*/, ""));
+    if (end) used = 2;
+  }
+  if (/^uhr$/i.test(words[used]?.text || "")) used += 1;
+  return { time, end, rest: words.slice(used) };
+}
+
+function minutesBetween(start, end) {
+  if (!start || !end) return 30;
+  const [startHour, startMinute] = start.split(":").map(Number);
+  const [endHour, endMinute] = end.split(":").map(Number);
+  const diff = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+  return diff > 0 && diff <= 480 ? diff : 30;
 }
 
 /* --------------------------------------------------------- Hauptfunktion */
 
 /**
- * @returns {{date: string, items: Array, warnings: Array<string>, confidence: number}}
+ * @returns {{days: Array<{date: string, items: Array}>, warnings: string[], confidence: number, skipped: number}}
  */
 export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date().getFullYear() } = {}) {
   const lines = tsvLines(tsv);
-  const text = fullText || lines.map((line) => line.text).join("\n");
   const warnings = [];
 
-  const date = parseGermanDate(text, fallbackYear);
-  if (!date) warnings.push("Auf dieser Seite wurde kein Datum gefunden. Bitte oben eintragen.");
-  else if (dateMatchesWeekday(date, text) === false) warnings.push("Datum und Wochentag auf dem Plan passen nicht zusammen. Bitte prüfen.");
+  if (!lines.length) {
+    const items = fromPlainText(fullText || "", lexicon);
+    const date = headerDate(fullText || "", fallbackYear);
+    return { days: items.length ? [{ date, items }] : [], warnings, confidence: 0, skipped: 0 };
+  }
 
-  const items = lines.length ? fromLines(lines, lexicon, warnings) : fromPlainText(text, lexicon);
-  if (!items.length) warnings.push("Es wurden keine Uhrzeiten erkannt. Termine können unten von Hand ergänzt werden.");
+  const columns = findColumns(lines);
+  const sections = splitIntoDays(lines, fallbackYear);
 
-  const confidence = lines.length
-    ? Math.round(lines.reduce((sum, line) => sum + line.confidence, 0) / lines.length)
-    : 0;
+  if (!sections.length) {
+    // Kein Tagesabschnitt im Tabellenkoerper: die ganze Seite gilt als ein Tag,
+    // dessen Datum aus dem Seitenkopf stammt. Gewarnt wird nur, wenn auch dort
+    // keines steht -- nicht schon, weil die Datumszeile fehlt.
+    const date = headerDate(fullText || lines.map((line) => line.text).join("\n"), fallbackYear);
+    if (!date) warnings.push("Auf dieser Seite wurde kein Datum gefunden. Bitte oben eintragen.");
+    else if (dateMatchesWeekday(date, fullText || "") === false) {
+      warnings.push("Datum und Wochentag auf dem Plan passen nicht zusammen. Bitte prüfen.");
+    }
+    sections.push({ date, lines });
+  }
 
-  return { date, items, warnings, confidence };
+  let skipped = 0;
+  const days = [];
+  for (const section of sections) {
+    const result = fromLines(section.lines, columns, lexicon);
+    skipped += result.skipped;
+    if (result.items.length) days.push({ date: section.date, items: result.items });
+  }
+
+  if (!days.length) warnings.push("Es wurden keine Uhrzeiten erkannt. Termine können unten von Hand ergänzt werden.");
+  for (const day of days) {
+    if (!day.date) warnings.push(`${day.items.length} Termine ohne erkanntes Datum – bitte das Datum eintragen.`);
+  }
+
+  return {
+    days,
+    warnings,
+    confidence: Math.round(lines.reduce((sum, line) => sum + line.confidence, 0) / lines.length),
+    skipped,
+  };
 }
 
-function fromLines(lines, lexicon, warnings) {
-  // Schritt 1: Rohzeilen einsammeln und Folgezeilen anhängen.
-  // Erst danach wird korrigiert -- sonst würde "Krankengymnastik im" schon
-  // zu "Krankengymnastik" begradigt, bevor "Bewegungsbad" dazukommt.
+/**
+ * Das Datum im Seitenkopf ist die letzte Wahl: dort stehen Anreise, Abreise
+ * und der Druckzeitpunkt, aber nicht der Tag der Termine.
+ */
+function headerDate(text, fallbackYear) {
+  const usable = String(text).split(/\r?\n/)
+    .filter((line) => !/(anreise|abreise|zuletzt gedruckt|geburt|aufnahme)/i.test(line))
+    .join("\n");
+  return parseGermanDate(usable, fallbackYear) || "";
+}
+
+/** Zerlegt die Seite an den Datumszeilen in Tagesabschnitte. */
+function splitIntoDays(lines, fallbackYear) {
+  const sections = [];
+  let current = null;
+  for (const line of lines) {
+    const date = dayHeadingDate(line, fallbackYear);
+    if (date) {
+      current = { date, lines: [] };
+      sections.push(current);
+      continue;
+    }
+    if (current) current.lines.push(line);
+  }
+  return sections;
+}
+
+function fromLines(lines, columns, lexicon) {
+  // Schritt 1: Rohzeilen sammeln und Folgezeilen anhaengen. Erst danach wird
+  // korrigiert -- sonst wuerde "Krankengymnastik im" schon begradigt, bevor
+  // "Bewegungsbad" dazukommt.
   const rows = [];
   let previous = null;
+  let skipped = 0;
 
   for (const line of lines) {
-    if (isHeaderLine(line.text)) { previous = null; continue; }
+    const text = clean(line.text);
+    if (isChrome(text) || isNoteLine(text) || (columns && line.top < columns.top - 4)) { previous = null; continue; }
+    if (isColumnHeading(text) && !extractTime(line.words)) { previous = null; continue; }
 
     const stamp = extractTime(line.words);
+
     if (!stamp) {
-      const isContinuation = previous
-        && line.top - previous.bottom < previous.height * 1.4
-        && line.left > previous.timeRight;
-      if (isContinuation) {
-        const extra = clean(line.words.map((word) => word.text).join(" "));
-        if (extra && extra.length <= 60) previous.continuation.push(extra);
+      // Zeile ohne Uhrzeit: entweder der Umbruch einer Tabellenzelle oder eine
+      // eigenstaendige Zeile ohne Zeitangabe. Der Zeilenabstand trennt beides
+      // zuverlaessig -- ein Umbruch klebt an der Zeile darueber (rund 0,3 der
+      // Schrifthoehe), eine neue Tabellenzeile hat das Zellpolster dazwischen.
+      const cells = splitCells(line.words, line.height);
+      if (!cells.length) continue;
+      const isWrap = previous && line.top - previous.bottom < previous.height * CONTINUATION_GAP;
+      if (isWrap) {
+        for (const cell of cells) {
+          if (columns) {
+            const index = columnIndexAt(columns.anchors, cell);
+            if (columns.anchors[index].role === "time") continue;
+            (previous.row.continuation[index] ||= []).push(cell.text);
+          } else {
+            (previous.row.continuation.title ||= []).push(cell.text);
+          }
+        }
+      } else {
+        skipped += 1;
+        previous = null;
       }
       continue;
     }
@@ -414,31 +577,31 @@ function fromLines(lines, lexicon, warnings) {
     const cells = splitCells(stamp.rest, line.height);
     if (!cells.length) { previous = null; continue; }
 
-    const row = {
-      time: stamp.time,
-      end: stamp.end,
-      cells,
-      continuation: [],
-      confidence: Math.min(line.confidence, ...cells.map((cell) => cell.confidence)),
-    };
+    const row = { time: stamp.time, end: stamp.end, cells, continuation: {}, confidence: Math.min(line.confidence, ...cells.map((cell) => cell.confidence)) };
     rows.push(row);
-    previous = {
-      continuation: row.continuation,
-      bottom: line.bottom,
-      height: line.height,
-      timeRight: stamp.rest[0] ? stamp.rest[0].left - 1 : line.left,
-    };
+    previous = { row, bottom: line.bottom, height: line.height };
   }
 
-  // Schritt 2: Zellen zuordnen, Folgezeile an den Titel hängen, dann korrigieren.
-  return rows.map((row) => {
-    const assigned = assignCells(row.cells, lexicon);
-    const rawTitle = clean([assigned.title, ...row.continuation].filter(Boolean).join(" "));
-    const title = correct(rawTitle, "title", lexicon);
-    const practitioner = correct(assigned.practitioner, "practitioner", lexicon);
-    const location = correct(assigned.location, "location", lexicon);
+  // Schritt 2: Zellen zuordnen, Fortsetzungen anhaengen, dann korrigieren.
+  const items = rows.map((row) => {
+    let assigned;
+    if (columns) {
+      // Die Fortsetzung wird in ihren eigenen Slot einsortiert, bevor die
+      // Spalten zu Feldern zusammengesetzt werden.
+      const slots = assignByColumns(row.cells, columns.anchors).slots;
+      for (const [index, extra] of Object.entries(row.continuation)) {
+        (slots[index] ||= []).push(...extra);
+      }
+      assigned = slotsToFields(slots, columns.anchors);
+    } else {
+      assigned = assignByContent(row.cells, lexicon);
+      const extra = row.continuation.title;
+      if (extra) assigned.title = clean([assigned.title, ...extra].join(" "));
+    }
 
-    if (!title.value) warnings.push(`${row.time}: Es wurde keine Anwendung erkannt.`);
+    const title = correct(assigned.title, "title", lexicon);
+    const practitioner = correct(assigned.practitioner, "practitioner", lexicon);
+    const location = correct(tidyLocation(assigned.location), "location", lexicon);
 
     return {
       id: newId(),
@@ -452,30 +615,31 @@ function fromLines(lines, lexicon, warnings) {
       confidence: row.confidence,
       corrections: [title, practitioner, location]
         .filter((entry) => entry.corrected)
-        .map((entry) => `${entry.from} \u2192 ${entry.value}`),
+        .map((entry) => `${entry.from} → ${entry.value}`),
     };
   });
+
+  return { items, skipped };
 }
 
-/** Rückfallebene ohne Koordinaten -- z. B. bei Text aus einer PDF-Textebene. */
+/** Rueckfallebene ohne Koordinaten -- etwa fuer Text aus einer PDF-Textebene. */
 function fromPlainText(text, lexicon) {
   const items = [];
   for (const raw of String(text).split(/\r?\n/)) {
-    // Bewusst nur trimmen: die Mehrfach-Leerzeichen sind hier die Spaltengrenzen
-    // und dürfen nicht wie sonst zu einem einzelnen Leerzeichen zusammenfallen.
-    const line = raw.replace(/[|\u00a6]/g, " ").replace(/[\u2010\u2011\u2013\u2014]/g, "-").replace(/[ \t]+$/,"").trim();
-    if (!line || isHeaderLine(line)) continue;
-    const match = line.match(/^(\d{1,2}\s*[:.]\s*\d{2})\s*(?:[-–]\s*(\d{1,2}\s*[:.]\s*\d{2}))?\s+(.*)$/);
+    // Bewusst nur trimmen: die Mehrfach-Leerzeichen sind hier die Spaltengrenzen.
+    const line = raw.replace(/[|¦]/g, " ").replace(/[‐‑–—]/g, "-").trim();
+    if (!line || isChrome(line) || isNoteLine(line)) continue;
+    const match = line.match(/^(\d{1,2}\s*[:.]\s*\d{2})\s*(?:-\s*(\d{1,2}\s*[:.]\s*\d{2}))?\s+(.*)$/);
     if (!match) continue;
     const time = normalizeTime(match[1]);
     if (!time) continue;
-    const parts = match[3].split(/\s{2,}|\t+|\s+[\u00b7|]\s+/).map(clean).filter(Boolean);
-    const assigned = assignCells(parts.map((part) => ({ text: part })), lexicon);
-    const title = correct(assigned.title || match[3], "title", lexicon);
+    const parts = match[3].split(/\s{2,}|\t+|\s+[·|]\s+/).map(clean).filter(Boolean);
+    const assigned = assignByContent(parts.map((part) => ({ text: part })), lexicon);
+    const title = correct(assigned.title || clean(match[3]), "title", lexicon);
     items.push({
       id: newId(),
       time,
-      duration: match[2] ? Math.max(5, minutesBetween(time, normalizeTime(match[2]))) : 30,
+      duration: match[2] ? minutesBetween(time, normalizeTime(match[2])) : 30,
       title: title.value || "Behandlung",
       location: assigned.location,
       practitioner: assigned.practitioner,
@@ -486,14 +650,6 @@ function fromPlainText(text, lexicon) {
     });
   }
   return items;
-}
-
-function minutesBetween(start, end) {
-  if (!start || !end) return 30;
-  const [startHour, startMinute] = start.split(":").map(Number);
-  const [endHour, endMinute] = end.split(":").map(Number);
-  const diff = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
-  return diff > 0 && diff <= 480 ? diff : 30;
 }
 
 export { KNOWN_TREATMENTS, clean };

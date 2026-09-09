@@ -23,6 +23,7 @@ const ui = {
   search: "",
   calendarMonth: null,
   review: null,
+  reviewWarnings: [],
 };
 
 const categoryColor = (id) => CATEGORIES.find((entry) => entry.id === id)?.color || "#5a6470";
@@ -264,19 +265,52 @@ async function handleFiles(files) {
   try {
     const pages = await readFiles(files, ({ label, ratio }) => setProgress(ratio, label));
     const lexicon = store.getLexicon();
-    const parsed = pages
-      .map((page) => ({ ...parsePage(page.tsv, page.text, { lexicon }), source: page.name }))
-      .filter((page) => page.items.length || page.date);
 
-    if (!parsed.length) {
+    // Eine Seite kann mehrere Tage enthalten, und ein Tag kann sich über zwei
+    // Seiten ziehen. Deshalb wird nach Datum gebündelt, nicht nach Seite.
+    const byDate = new Map();
+    const warnings = [];
+    let unknownIndex = 0;
+
+    let skipped = 0;
+
+    for (const page of pages) {
+      const parsed = parsePage(page.tsv, page.text, { lexicon });
+      warnings.push(...parsed.warnings.map((text) => pages.length > 1 ? `${page.name}: ${text}` : text));
+      skipped += parsed.skipped;
+      for (const day of parsed.days) {
+        const key = day.date || `ohne-datum-${unknownIndex += 1}`;
+        const entry = byDate.get(key) || { date: day.date, items: [], sources: [], confidence: parsed.confidence };
+        entry.items.push(...day.items);
+        if (!entry.sources.includes(page.name)) entry.sources.push(page.name);
+        byDate.set(key, entry);
+      }
+    }
+
+    if (!byDate.size) {
       $("#review-progress").hidden = true;
       $("#review-body").innerHTML = `<div class="notice">Auf den gewählten Dateien wurden keine Termine gefunden.
         Häufige Ursachen: zu dunkles Foto, starke Schräglage oder ein sehr kleiner Ausschnitt.
-        Am besten das Blatt flach hinlegen, von oben fotografieren und den ganzen Plan erfassen.</div>`;
+        Am besten das Blatt flach hinlegen, von oben fotografieren und den ganzen Plan erfassen.
+        ${warnings.length ? `<ul>${warnings.map((text) => `<li>${escapeHTML(text)}</li>`).join("")}</ul>` : ""}</div>`;
       return;
     }
 
-    ui.review = parsed.map(preparePage);
+    ui.review = [...byDate.values()]
+      .sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"))
+      .map((day) => {
+        day.items.sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+        // Ein bereits vorhandener Tag wird standardmäßig ersetzt: Der neue Plan
+        // ist der aktuellere. Zusammenführen bleibt als bewusste Wahl möglich.
+        return { ...day, mode: "replace", existingCount: store.getDay(day.date)?.items.length || 0 };
+      });
+    // Zeilen ohne Uhrzeit gibt es auf jeder Seite ("Eigentraining Therme").
+    // Eine zusammengefasste Zeile genügt -- pro Seite wäre es nur Rauschen.
+    if (skipped) {
+      warnings.push(`${skipped} Zeilen ohne Uhrzeit wurden nicht übernommen (etwa „Eigentraining Therme“ oder Hinweistexte). Bei Bedarf unten von Hand ergänzen.`);
+    }
+    ui.reviewWarnings = warnings;
+
     $("#review-progress").hidden = true;
     $("#review-foot").hidden = false;
     renderReview();
@@ -290,63 +324,57 @@ async function handleFiles(files) {
   }
 }
 
-function preparePage(page) {
-  const existing = page.date ? store.getDay(page.date) : null;
-  return {
-    ...page,
-    // Ein bereits vorhandener Tag wird standardmäßig ersetzt: Der neue Plan
-    // ist der aktuellere. Zusammenführen bleibt als bewusste Wahl möglich.
-    mode: existing ? "replace" : "replace",
-    existingCount: existing?.items.length || 0,
-  };
-}
-
 function setProgress(ratio, label) {
   $("#progress-bar").style.width = `${Math.max(2, Math.round(ratio * 100))}%`;
   $("#progress-text").textContent = label;
 }
 
 function renderReview() {
-  $("#review-body").innerHTML = ui.review.map((page, pageIndex) => {
-    const warnings = page.warnings.length
-      ? `<div class="notice"><strong>Bitte kurz prüfen:</strong><ul>${page.warnings.map((text) => `<li>${escapeHTML(text)}</li>`).join("")}</ul></div>`
-      : "";
+  const globalWarnings = (ui.reviewWarnings || []).length
+    ? `<div class="notice"><strong>Hinweise zur Erkennung:</strong>
+         <ul>${ui.reviewWarnings.map((text) => `<li>${escapeHTML(text)}</li>`).join("")}</ul></div>`
+    : "";
 
-    const conflict = page.existingCount
+  $("#review-body").innerHTML = globalWarnings + ui.review.map((day, dayIndex) => {
+    const heading = day.date ? escapeHTML(fmtDay.format(dateOf(day.date))) : "Tag ohne erkanntes Datum";
+
+    const conflict = day.existingCount
       ? `<div class="notice conflict">
-           <strong>Für diesen Tag sind bereits ${page.existingCount} Termine gespeichert.</strong>
+           <strong>Für diesen Tag sind bereits ${day.existingCount} Termine gespeichert.</strong>
            <div class="conflict-choice">
-             <label><input type="radio" name="mode-${pageIndex}" value="replace" data-mode="${pageIndex}" ${page.mode === "replace" ? "checked" : ""}>
+             <label><input type="radio" name="mode-${dayIndex}" value="replace" data-mode="${dayIndex}" ${day.mode === "replace" ? "checked" : ""}>
                <span>Alten Tag <strong>ersetzen</strong> – der neue Plan gilt (empfohlen).</span></label>
-             <label><input type="radio" name="mode-${pageIndex}" value="merge" data-mode="${pageIndex}" ${page.mode === "merge" ? "checked" : ""}>
+             <label><input type="radio" name="mode-${dayIndex}" value="merge" data-mode="${dayIndex}" ${day.mode === "merge" ? "checked" : ""}>
                <span>Termine <strong>ergänzen</strong> – Bestehendes bleibt erhalten.</span></label>
            </div>
          </div>`
       : "";
 
     return `
-      <section class="review-page" data-page="${pageIndex}">
+      <section class="review-page" data-page="${dayIndex}">
         <div class="review-head">
-          <label class="field"><span>Datum des Plans</span>
-            <input type="date" data-page-date="${pageIndex}" value="${escapeHTML(page.date)}"></label>
-          <span class="review-source">${escapeHTML(page.source)}${page.confidence ? ` · Lesequalität ${page.confidence} %` : ""}</span>
+          <label class="field"><span>Datum</span>
+            <input type="date" data-page-date="${dayIndex}" value="${escapeHTML(day.date || "")}"></label>
+          <div>
+            <strong class="review-day">${heading}</strong>
+            <span class="review-source">${escapeHTML(day.sources.join(", "))}${day.confidence ? ` · Lesequalität ${day.confidence} %` : ""}</span>
+          </div>
         </div>
-        ${warnings}
         ${conflict}
-        ${page.items.map((item, itemIndex) => reviewRow(item, pageIndex, itemIndex)).join("")}
-        <button class="ghost-button" data-add-row="${pageIndex}">+ Zeile ergänzen</button>
+        ${day.items.map((item, itemIndex) => reviewRow(item, dayIndex, itemIndex)).join("")}
+        <button class="ghost-button" data-add-row="${dayIndex}">+ Zeile ergänzen</button>
       </section>`;
   }).join("");
 }
 
-function reviewRow(item, pageIndex, itemIndex) {
+function reviewRow(item, dayIndex, itemIndex) {
   const flagged = item.corrections?.length || (item.confidence && item.confidence < 70);
   const flag = item.corrections?.length
     ? `<span class="flag">automatisch korrigiert: ${escapeHTML(item.corrections.join(", "))}</span>`
     : item.confidence && item.confidence < 70 ? `<span class="flag">unsicher erkannt – bitte prüfen</span>` : "";
 
   return `
-    <div class="review-row ${flagged ? "is-flagged" : ""}" data-row="${pageIndex}:${itemIndex}">
+    <div class="review-row ${flagged ? "is-flagged" : ""}" data-row="${dayIndex}:${itemIndex}">
       <input type="time" data-field="time" value="${escapeHTML(item.time)}" aria-label="Uhrzeit">
       <div class="fields">
         <input data-field="title" value="${escapeHTML(item.title)}" placeholder="Anwendung" aria-label="Anwendung">
@@ -356,31 +384,31 @@ function reviewRow(item, pageIndex, itemIndex) {
         </div>
         ${flag}
       </div>
-      <button class="drop" data-drop="${pageIndex}:${itemIndex}" aria-label="Zeile entfernen">×</button>
+      <button class="drop" data-drop="${dayIndex}:${itemIndex}" aria-label="Zeile entfernen">×</button>
     </div>`;
 }
 
 function saveReview() {
-  const pages = ui.review || [];
-  const missing = pages.filter((page) => !page.date);
-  if (missing.length) {
-    toast("Bitte zuerst für jede Seite das Datum eintragen.");
+  const days = ui.review || [];
+  if (days.some((day) => !day.date)) {
+    toast("Bitte zuerst für jeden Tag das Datum eintragen.");
     return;
   }
 
   let saved = 0;
-  for (const page of pages) {
-    const items = page.items.filter((item) => item.title && item.time);
+  for (const day of days) {
+    const items = day.items.filter((item) => item.title && item.time);
     if (!items.length) continue;
-    store.putDay(page.date, items, { mode: page.mode, source: page.source });
+    store.putDay(day.date, items, { mode: day.mode, source: day.sources.join(", ") });
     saved += items.length;
   }
   store.flush();
 
   ui.review = null;
+  ui.reviewWarnings = [];
   $("#review-dialog").close();
   render();
-  toast(saved ? `${saved} Termine gespeichert.` : "Es wurde nichts gespeichert.");
+  toast(saved ? `${saved} Termine an ${days.length} Tag(en) gespeichert.` : "Es wurde nichts gespeichert.");
 }
 
 /* --------------------------------------------------- Termin bearbeiten */
@@ -535,17 +563,16 @@ function bind() {
     const target = event.target;
     const pageDate = target.dataset.pageDate;
     if (pageDate !== undefined) {
-      const page = ui.review[Number(pageDate)];
-      page.date = target.value;
-      const existing = store.getDay(page.date);
-      page.existingCount = existing?.items.length || 0;
+      const day = ui.review[Number(pageDate)];
+      day.date = target.value;
+      day.existingCount = store.getDay(day.date)?.items.length || 0;
       renderReview();
       return;
     }
     const row = target.closest("[data-row]");
     if (!row || !target.dataset.field) return;
-    const [pageIndex, itemIndex] = row.dataset.row.split(":").map(Number);
-    const item = ui.review[pageIndex].items[itemIndex];
+    const [dayIndex, itemIndex] = row.dataset.row.split(":").map(Number);
+    const item = ui.review[dayIndex].items[itemIndex];
     item[target.dataset.field] = target.value;
     if (target.dataset.field === "title") item.category = categorize(target.value);
   });
@@ -558,21 +585,21 @@ function bind() {
   $("#review-body").addEventListener("click", (event) => {
     const drop = event.target.closest("[data-drop]");
     if (drop) {
-      const [pageIndex, itemIndex] = drop.dataset.drop.split(":").map(Number);
-      ui.review[pageIndex].items.splice(itemIndex, 1);
+      const [dayIndex, itemIndex] = drop.dataset.drop.split(":").map(Number);
+      ui.review[dayIndex].items.splice(itemIndex, 1);
       renderReview();
       return;
     }
     const add = event.target.closest("[data-add-row]");
     if (add) {
-      const page = ui.review[Number(add.dataset.addRow)];
-      page.items.push({ id: crypto.randomUUID(), time: "", title: "", location: "", practitioner: "", note: "", category: "sonstiges", corrections: [] });
+      const day = ui.review[Number(add.dataset.addRow)];
+      day.items.push({ id: crypto.randomUUID(), time: "", title: "", location: "", practitioner: "", note: "", category: "sonstiges", corrections: [] });
       renderReview();
     }
   });
 
   $("#review-save").addEventListener("click", saveReview);
-  $("#review-cancel").addEventListener("click", () => { ui.review = null; $("#review-dialog").close(); });
+  $("#review-cancel").addEventListener("click", () => { ui.review = null; ui.reviewWarnings = []; $("#review-dialog").close(); });
 
   $("#item-form").addEventListener("submit", submitItem);
   $("#item-delete").addEventListener("click", () => {

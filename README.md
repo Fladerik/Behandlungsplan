@@ -41,9 +41,9 @@ kommen also ohne Zutun der Nutzer an.
 
 ### Der Tag ist die Einheit, nicht der einzelne Termin
 
-Ein Scan ergibt immer genau einen Tagesplan. Wird derselbe Tag erneut
-eingelesen, ersetzt der neue Plan den alten vollständig – nach Rückfrage, mit
-„ersetzen“ als Voreinstellung, weil der neuere Plan der gültige ist.
+Ein eingelesener Tagesplan ersetzt den gespeicherten Tag vollständig – nach
+Rückfrage, mit „ersetzen“ als Voreinstellung, weil der neuere Plan der gültige
+ist. Gestrichene Anwendungen verschwinden dabei, hinzugekommene erscheinen.
 
 Das ist bewusst so gewählt: Ein Abgleich einzelner Termine müsste raten, ob
 eine gelesene Zeile ein neuer Termin oder eine veränderte Fassung eines
@@ -51,23 +51,48 @@ bestehenden ist. Genau daran scheitern solche Apps – entweder entstehen
 Dubletten, oder neue Termine werden als vermeintliche Dubletten verworfen.
 Auf Tagesebene stellt sich die Frage nicht.
 
-### Warum die Erkennung zeilenweise arbeitet
+### Eine Seite ist nicht ein Tag
 
-Ein früherer Ansatz hat feste Spaltengrenzen aus den Tabellenüberschriften
-abgeleitet. Fehlte eine Überschrift oder war sie verlesen, verschoben sich alle
-Spalten: Behandlernamen landeten in der Ortsspalte, Anwendungen blieben leer.
+Echte Klinikpläne bündeln mehrere Tage auf einem Blatt, und ein Tag kann sich
+über zwei Blätter ziehen. Die Tage werden deshalb nicht an den Seitengrenzen
+getrennt, sondern an den Datumszeilen im Tabellenkörper
+(„Freitag 04. September 2026“).
 
-Stattdessen:
+Das Datum im Seitenkopf wird dafür ausdrücklich **nicht** verwendet: Dort
+stehen Anreise, Abreise und der Druckzeitpunkt. Wer den Kopf ausliest, trägt
+alle Termine auf dem Anreisetag ein. Erst wenn im Tabellenkörper keine
+Datumszeile steht, dient der Kopf als Rückfallebene – unter Ausschluss der
+Zeilen zu Anreise, Abreise und Druckdatum.
 
-1. Wörter werden zu Zeilen gruppiert – die stabilste Information, die eine
-   Texterkennung liefert.
-2. Innerhalb der Zeile trennen die tatsächlichen Wortabstände die Zellen.
-   Der Schwellwert leitet sich aus der Schrifthöhe ab und funktioniert damit
-   unabhängig von Auflösung und Zoomstufe.
-3. Jede Zelle wird inhaltlich eingeordnet – ist das ein Ort, eine Person, eine
-   Anwendung? – und nicht über ihre Position.
-4. Zeilen ohne Uhrzeit, die direkt unter einem Termin stehen, gelten als dessen
-   Fortsetzung („Krankengymnastik im“ + „Bewegungsbad“).
+Zusätzlich wird geprüft, ob der genannte Wochentag zum Datum passt. Tut er das
+nicht, erscheint ein Hinweis in der Prüfansicht statt eines stillen Fehlers.
+
+### Warum die Spaltenposition zählt – und wann nicht
+
+Hat ein Plan eine Spaltenüberschrift („Zeit | Haus | Behandlungsstelle |
+Heilmittel | Behandler“), ist die Position das verlässlichste Signal, das er
+hergibt: Die Klinik druckt jeden Tag dieselbe Tabelle. Die Überschriften
+liefern die Spaltenanker, und jede Zelle wird der Spalte zugeordnet, deren
+Bereich ihre linke Kante trifft.
+
+Fehlt die Überschrift oder ist sie unlesbar, greift die inhaltliche
+Zuordnung: Ist diese Zelle ein Ort, eine Person oder eine Anwendung? Diese
+Rückfallebene ist der Grund, warum ein fehlender Tabellenkopf nicht mehr –
+wie in der Vorgängerversion – alle Spalten verschiebt.
+
+Zwei weitere Eigenheiten echter Pläne sind berücksichtigt:
+
+- **Umbrüche innerhalb einer Zelle** („Haus am“ / „Gsundbrunnen“) gehören zu
+  ihrer eigenen Spalte, nicht an die Anwendung. Unterschieden werden sie am
+  Zeilenabstand: Ein Umbruch klebt mit rund 0,3 Zeilenhöhen an der Zeile
+  darüber, eine neue Tabellenzeile hat ab 0,65 deutlich mehr Abstand.
+- **Hinweistexte** zwischen den Terminen („In der Zeit von 7 - 9 Uhr ist der
+  Raum geöffnet“, „Öffnungszeiten der Therme: Mo - So 10 -22 Uhr“) enthalten
+  selbst Uhrzeiten. Sie werden erkannt und übersprungen, damit daraus keine
+  Phantomtermine entstehen.
+
+Zeilen ohne Uhrzeit („Eigentraining Therme“) werden nicht übernommen. Die
+Prüfansicht nennt ihre Anzahl, damit nichts unbemerkt verloren geht.
 
 ### Wie falsch gelesene Namen korrigiert werden
 
@@ -78,8 +103,17 @@ abgeglichen: „Muler“ wird zu „Müller“, sobald „Müller“ einmal best
 Für Anwendungen gibt es zusätzlich eine Grundliste gängiger Reha-Leistungen.
 
 Die Toleranz wächst mit der Wortlänge, bleibt aber eng genug, dass aus
-„Bad 2“ nie „Bad 3“ wird. Jede Korrektur wird in der Prüfansicht angezeigt,
-ebenso jede Zeile, die die Texterkennung selbst als unsicher meldet.
+„Raum 2“ nie „Raum 5“ wird – Kandidaten mit abweichenden Ziffern werden gar
+nicht erst verglichen.
+
+Pro Begriff führt das Wörterbuch nur **eine** Schreibweise. Sonst sammelt es
+Verlesungsvarianten an und normalisiert später womöglich auf die falsche
+davon. Unterscheiden sich zwei Fassungen nur in Zeichen, die im Deutschen
+nicht vorkommen („Bewegı.ther.Sch.“ gegen „Beweg.ther.Sch.“), setzt sich die
+sauberere durch.
+
+Jede Korrektur wird in der Prüfansicht angezeigt, ebenso jede Zeile, die die
+Texterkennung selbst als unsicher meldet.
 
 **Gespeichert wird nie ohne Prüfung.** Das Erkennungsergebnis landet zuerst in
 einer bearbeitbaren Liste. Erst „Speichern“ schreibt es in den Plan.
