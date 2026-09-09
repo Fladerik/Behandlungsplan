@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0d5c63">
+  <meta name="description" content="Behandlungsplan fotografieren, Termine prüfen und auf dem eigenen Gerät behalten.">
+  <title>Federsee Terminplan</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8.5" cy="14.5" r="1.3" fill="currentColor"/><circle cx="12" cy="14.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="14.5" r="1.3" fill="currentColor"/></svg>
+      </span>
+      <div>
+        <h1>Federsee Terminplan</h1>
+        <p id="brand-sub">Dein persönlicher Therapie- und Tagesplan</p>
+      </div>
+    </div>
+    <button id="menu-button" class="icon-button" aria-label="Menü öffnen" aria-haspopup="dialog">⋯</button>
+  </div>
+
+  <!-- Nächster Termin: die wichtigste Information, immer sichtbar -->
+  <section id="next-up" class="next-up" aria-live="polite" aria-label="Nächster Termin"></section>
+
+  <!-- Tagesleiste: heute plus die folgenden Tage -->
+  <nav class="day-strip" id="day-strip" aria-label="Tage"></nav>
+</header>
+
+<main id="view-plan">
+  <div class="toolbar">
+    <div class="chips" id="category-filter" role="group" aria-label="Nach Kategorie filtern"></div>
+    <div class="search-row">
+      <input id="search" type="search" placeholder="Termin oder Ort suchen …" aria-label="Suchen" autocomplete="off">
+      <button id="calendar-button" class="ghost-button">Kalender</button>
+    </div>
+  </div>
+
+  <div id="plan-list" class="plan-list"></div>
+
+  <section id="empty-state" class="empty-state" hidden>
+    <h2>Noch kein Plan hinterlegt</h2>
+    <p>Fotografiere deinen Behandlungsplan oder lade ihn als PDF hoch. Die Termine werden erkannt, du prüfst sie einmal – danach stehen sie dauerhaft auf diesem Gerät.</p>
+    <button class="primary-button" data-open-scan>Plan fotografieren oder hochladen</button>
+  </section>
+</main>
+
+<!-- Aktionsleiste unten, damit sie am Telefon mit dem Daumen erreichbar ist -->
+<nav class="action-bar">
+  <button class="primary-button" data-open-scan>
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>
+    Plan scannen
+  </button>
+  <button id="add-item" class="secondary-button">+ Termin</button>
+</nav>
+
+<input id="file-input" type="file" accept="image/*,application/pdf" multiple hidden>
+
+<!-- ------------------------------------------------------------ Kalender -->
+<dialog id="calendar-dialog" class="sheet" aria-label="Kalender und Archiv">
+  <div class="sheet-head">
+    <h2>Kalender</h2>
+    <button class="icon-button" data-close aria-label="Schließen">✕</button>
+  </div>
+  <div class="sheet-body">
+  <div class="month-head">
+    <button class="icon-button" id="month-prev" aria-label="Vorheriger Monat">‹</button>
+    <strong id="month-label"></strong>
+    <button class="icon-button" id="month-next" aria-label="Nächster Monat">›</button>
+  </div>
+  <div class="weekday-row" aria-hidden="true"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
+  <div id="month-grid" class="month-grid"></div>
+  <div id="calendar-day" class="calendar-day"></div>
+  </div>
+</dialog>
+
+<!-- ------------------------------------------------------- Prüfen & Speichern -->
+<dialog id="review-dialog" class="sheet wide" aria-label="Erkannte Termine prüfen">
+  <div class="sheet-head">
+    <h2>Erkannte Termine prüfen</h2>
+    <button class="icon-button" data-close aria-label="Schließen">✕</button>
+  </div>
+  <div id="review-progress" class="progress" hidden>
+    <div class="progress-track"><div id="progress-bar"></div></div>
+    <p id="progress-text">Vorbereitung …</p>
+  </div>
+  <div id="review-body" class="review-body"></div>
+  <div class="sheet-foot" id="review-foot" hidden>
+    <button id="review-cancel" class="ghost-button">Verwerfen</button>
+    <button id="review-save" class="primary-button">Speichern</button>
+  </div>
+</dialog>
+
+<!-- --------------------------------------------------------------- Menü -->
+<dialog id="menu-dialog" class="sheet" aria-label="Menü">
+  <div class="sheet-head">
+    <h2>Einstellungen &amp; Daten</h2>
+    <button class="icon-button" data-close aria-label="Schließen">✕</button>
+  </div>
+  <div class="menu-body">
+    <label class="field">
+      <span>Name (nur auf diesem Gerät)</span>
+      <input id="profile-name" placeholder="z. B. Erika Musterfrau" autocomplete="name">
+    </label>
+    <label class="field">
+      <span>Erinnerung beim Kalenderexport</span>
+      <select id="reminder">
+        <option value="0">keine</option>
+        <option value="10">10 Minuten vorher</option>
+        <option value="15" selected>15 Minuten vorher</option>
+        <option value="30">30 Minuten vorher</option>
+        <option value="60">1 Stunde vorher</option>
+      </select>
+    </label>
+
+    <div class="menu-group">
+      <h3>Termine weitergeben</h3>
+      <button id="export-ics" class="ghost-button">Kommende Termine als Kalenderdatei</button>
+    </div>
+
+    <div class="menu-group">
+      <h3>Gerätewechsel &amp; Sicherung</h3>
+      <p class="hint">Die Daten liegen ausschließlich in diesem Browser. Für ein neues Gerät oder vor dem Löschen der Browserdaten hier eine Sicherungsdatei erzeugen.</p>
+      <button id="export-backup" class="ghost-button">Sicherung speichern</button>
+      <button id="import-backup" class="ghost-button">Sicherung einlesen</button>
+      <input id="backup-input" type="file" accept="application/json,.json" hidden>
+    </div>
+
+    <div class="menu-group danger">
+      <h3>Alles löschen</h3>
+      <p class="hint">Entfernt sämtliche Termine von diesem Gerät. Das lässt sich nicht rückgängig machen.</p>
+      <button id="clear-all" class="danger-button">Alle Daten löschen</button>
+    </div>
+
+    <p class="storage-note" id="storage-note"></p>
+  </div>
+</dialog>
+
+<!-- --------------------------------------------------------- Termin bearbeiten -->
+<dialog id="item-dialog" class="sheet" aria-label="Termin bearbeiten">
+  <form id="item-form" method="dialog">
+    <div class="sheet-head">
+      <h2 id="item-dialog-title">Termin</h2>
+      <button type="button" class="icon-button" data-close aria-label="Schließen">✕</button>
+    </div>
+    <div class="menu-body">
+      <div class="field-row">
+        <label class="field"><span>Datum</span><input name="date" type="date" required></label>
+        <label class="field"><span>Uhrzeit</span><input name="time" type="time" required></label>
+        <label class="field short"><span>Dauer</span><input name="duration" type="number" min="5" max="480" step="5" value="30"></label>
+      </div>
+      <label class="field"><span>Anwendung</span><input name="title" required placeholder="z. B. Krankengymnastik"></label>
+      <label class="field"><span>Ort</span><input name="location" placeholder="z. B. Haus 2, Raum 214"></label>
+      <label class="field"><span>Behandler</span><input name="practitioner" placeholder="z. B. Frau Müller"></label>
+      <label class="field"><span>Kategorie</span><select name="category" id="item-category"></select></label>
+      <label class="field"><span>Notiz</span><input name="note" placeholder="optional"></label>
+    </div>
+    <div class="sheet-foot">
+      <button type="button" id="item-delete" class="danger-button">Löschen</button>
+      <button type="submit" class="primary-button">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="./vendor/tesseract.min.js"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
