@@ -284,6 +284,18 @@ export function bestMatch(value, candidates) {
 function korrigiereWortweise(text, kandidaten) {
   const woerter = text.split(/\s+/);
   if (woerter.length < 2) return text;
+
+  // Alle Einzelwoerter des Grundbestands. Ein Wort, das darin vorkommt, ist
+  // richtig gelesen und wird nicht angetastet -- sonst wuerde aus dem
+  // korrekten "Wartebereich" das laengere "KG-Wartebereich".
+  const bekannteWoerter = new Set();
+  for (const eintrag of kandidaten) {
+    for (const wort of String(eintrag).split(/[\s/]+/)) {
+      const gefaltet = foldForCompare(wort);
+      if (gefaltet.length >= 3) bekannteWoerter.add(gefaltet);
+    }
+  }
+
   let geaendert = false;
   const neu = woerter.map((wort) => {
     // Satzzeichen am Rand gehoeren nicht zum Wort: das Komma trennt hier Haus
@@ -291,6 +303,7 @@ function korrigiereWortweise(text, kandidaten) {
     const teile = wort.match(/^([^\wÄÖÜäöüß]*)(.*?)([^\wÄÖÜäöüß]*)$/);
     const [, davor, kern, danach] = teile;
     if (kern.length < 4 || /\d/.test(kern)) return wort;
+    if (bekannteWoerter.has(foldForCompare(kern))) return wort;
     const treffer = bestMatch(kern, kandidaten);
     if (treffer && treffer.value !== kern && treffer.value.split(/\s+/).length === 1) {
       geaendert = true;
@@ -301,21 +314,52 @@ function korrigiereWortweise(text, kandidaten) {
   return geaendert ? neu.join(" ") : text;
 }
 
+/**
+ * Setzt eine angeschnittene Anrede wieder zusammen.
+ *
+ * Die Texterkennung verliert bei Namen regelmaessig den Anfangsbuchstaben:
+ * aus "Frau M. Stubenrauch" wird "rau M. Stubenrauch", aus "Herr R. Moerschel"
+ * wird "err R. Moerschel". Ein Woerterbuch hilft hier beim ersten Plan nicht,
+ * denn den Nachnamen kennt es noch nicht -- die Anrede dagegen ist aus sich
+ * heraus erkennbar.
+ *
+ * Bewusst eng gefasst: Der Rest muss wie ein Name aussehen, damit aus dem
+ * Nachnamen "Rau" nicht "Frau" wird.
+ */
+function ergaenzeAnrede(text) {
+  const treffer = text.match(/^(rau|au|err|rr)\.?\s+(.+)$/);
+  if (!treffer) return text;
+
+  const [, bruchstueck, rest] = treffer;
+  // Der Rest muss mit einem Grossbuchstaben beginnen und wie ein Name
+  // gebaut sein: "M. Stubenrauch", "Stubenrauch", "med. Hofer".
+  if (!/^[A-ZÄÖÜ]/.test(rest) || rest.split(/\s+/).length > 3) return text;
+
+  const anrede = ["rau", "au"].includes(bruchstueck) ? "Frau" : "Herr";
+  return `${anrede} ${rest}`;
+}
+
 /** Korrigiert einen erkannten Text gegen bekannte Begriffe. */
 export function correct(value, field, lexicon = {}) {
-  const text = clean(value);
-  if (!text) return { value: "", corrected: false };
+  const roh = clean(value);
+  if (!roh) return { value: "", corrected: false };
+
+  // Bei Behandlern zuerst die Anrede zusammensetzen: erst danach hat der
+  // Abgleich mit dem Woerterbuch eine Chance auf einen Treffer.
+  const text = field === "practitioner" ? ergaenzeAnrede(roh) : roh;
+  const anredeErgaenzt = text !== roh;
   const learned = Object.entries(lexicon[field] || {}).sort((a, b) => b[1] - a[1]).map(([term]) => term);
   const grundbestand = field === "title" ? KNOWN_TREATMENTS : field === "location" ? KNOWN_LOCATIONS : [];
   const pool = [...learned, ...grundbestand];
   const match = bestMatch(text, pool);
   if (!match) {
     const wortweise = korrigiereWortweise(text, grundbestand);
-    return wortweise === text
-      ? { value: text, corrected: false }
-      : { value: wortweise, corrected: true, from: text };
+    return wortweise === roh
+      ? { value: roh, corrected: false }
+      : { value: wortweise, corrected: true, from: roh };
   }
-  if (match.value === text) return { value: text, corrected: false };
+  if (match.value === roh) return { value: roh, corrected: false };
+  if (match.value === text) return { value: text, corrected: anredeErgaenzt, from: roh };
 
   // Bei echtem Abstand gewinnt der bekannte Begriff -- das ist der Zweck des
   // Woerterbuchs. Sind beide Schreibweisen dagegen nach der Normalisierung
@@ -324,9 +368,9 @@ export function correct(value, field, lexicon = {}) {
   const winner = match.distance > 0 || oddCharacters(match.value) <= oddCharacters(text)
     ? match.value
     : text;
-  return winner === text
-    ? { value: text, corrected: false }
-    : { value: winner, corrected: true, from: text };
+  return winner === roh
+    ? { value: roh, corrected: false }
+    : { value: winner, corrected: true, from: roh };
 }
 
 /* ------------------------------------------------------- TSV -> Textzeilen */

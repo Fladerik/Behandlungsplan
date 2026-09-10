@@ -196,6 +196,16 @@ Die Toleranz wächst mit der Wortlänge, bleibt aber eng genug, dass aus
 „Raum 2“ nie „Raum 5“ wird – Kandidaten mit abweichenden Ziffern werden gar
 nicht erst verglichen.
 
+Bei Behandlernamen kommt eine Regel hinzu, die ohne Wörterbuch auskommt: Die
+Texterkennung verliert dort regelmäßig den Anfangsbuchstaben, aus „Frau M.
+Stubenrauch" wird „rau M. Stubenrauch". Die Anrede ist aus sich heraus
+erkennbar und wird wieder zusammengesetzt – eng gefasst, damit aus dem
+Nachnamen „Rau" nicht „Frau" wird.
+
+Ein Wort, das im Grundwortschatz vorkommt, wird nie ersetzt. Ohne diese Regel
+machte die stückweise Korrektur aus dem korrekten „Wartebereich" das längere
+„KG-Wartebereich".
+
 Pro Begriff führt das Wörterbuch nur **eine** Schreibweise. Sonst sammelt es
 Verlesungsvarianten an und normalisiert später womöglich auf die falsche
 davon. Unterscheiden sich zwei Fassungen nur in Zeichen, die im Deutschen
