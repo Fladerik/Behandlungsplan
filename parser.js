@@ -315,6 +315,76 @@ function korrigiereWortweise(text, kandidaten) {
 }
 
 /**
+ * Woerter, die klein geschrieben fuer sich stehen duerfen. Sie sind nie der
+ * Rest eines umbrochenen Wortes.
+ */
+const KLEINE_EIGENSTAENDIGE_WOERTER = new Set([
+  "am", "im", "in", "an", "auf", "aus", "bei", "mit", "und", "zu", "zum", "zur",
+  "der", "die", "das", "den", "dem", "des", "von", "vom", "fur", "uhr", "ab", "bis",
+]);
+
+/** Alle Einzelwoerter des Grundbestands -- einmal aufgebaut, nicht je Zeile. */
+const GRUNDWOERTER = (() => {
+  const menge = new Set();
+  for (const eintrag of [...KNOWN_LOCATIONS, ...KNOWN_TREATMENTS]) {
+    for (const wort of String(eintrag).split(/[\s/]+/)) {
+      const gefaltet = foldForCompare(wort);
+      if (gefaltet.length >= 3) menge.add(gefaltet);
+    }
+  }
+  return menge;
+})();
+
+/** Grundbestand samt gelernter Begriffe, ebenfalls in Einzelwoerter zerlegt. */
+function wortbestand(lexicon = {}) {
+  const menge = new Set(GRUNDWOERTER);
+  for (const feld of ["title", "location", "practitioner"]) {
+    for (const term of Object.keys(lexicon[feld] || {})) {
+      for (const wort of String(term).split(/[\s/]+/)) {
+        const gefaltet = foldForCompare(wort);
+        if (gefaltet.length >= 3) menge.add(gefaltet);
+      }
+    }
+  }
+  return menge;
+}
+
+/**
+ * Erkennt den Rest eines Wortes, das ohne Trennstrich umbrochen wurde.
+ *
+ * Die Spalte "Haus" ist auf diesen Plaenen schmal, und die Klinik-Software
+ * bricht hart nach Zeichen um: aus "Patientenzimmer" wird "Patientenzimm" in
+ * der einen und "er" in der naechsten Zeile -- ohne Bindestrich. Wuerde man
+ * beides mit einem Leerzeichen verbinden, bliebe im Ort ein sinnloses "er".
+ *
+ * Ein wirklich neues Wort faengt in diesen Zellen praktisch immer gross an
+ * ("Haus am" / "Gsundbrunnen"); ein Wortrest ist klein und kurz. Sicher ist
+ * der Fall, wenn beide Teile zusammen ein bekanntes Wort ergeben.
+ */
+function istWortrest(vorher, bruchstueck, bekannt) {
+  if (!vorher || !bruchstueck) return false;
+  if (!/^[a-zäöüß]{1,6}$/.test(bruchstueck)) return false;
+  if (KLEINE_EIGENSTAENDIGE_WOERTER.has(foldForCompare(bruchstueck))) return false;
+  const letztes = vorher.split(/\s+/).pop();
+  // Nur an einen Wortanfang anschliessen -- nicht an "33" oder "Pr.".
+  if (!/[A-Za-zÄÖÜäöüß]$/.test(letztes)) return false;
+  if (bekannt.has(foldForCompare(letztes + bruchstueck))) return true;
+  // Sonst nur, wenn der Anfang selbst kein vollstaendiges Wort ist und der
+  // Rest sehr kurz bleibt: "Ergo" / "einzel" bleiben so zwei Woerter.
+  return bruchstueck.length <= 3 && !bekannt.has(foldForCompare(letztes));
+}
+
+/** Haengt die Zellen einer Folgezeile an -- Wortreste ohne Leerzeichen. */
+function haengeFortsetzungAn(slot, teile, bekannt) {
+  for (const teil of teile) {
+    const letzter = slot.length ? slot[slot.length - 1] : "";
+    if (istWortrest(letzter, teil, bekannt)) slot[slot.length - 1] = letzter + teil;
+    else slot.push(teil);
+  }
+  return slot;
+}
+
+/**
  * Setzt eine angeschnittene Anrede wieder zusammen.
  *
  * Die Texterkennung verliert bei Namen regelmaessig den Anfangsbuchstaben:
@@ -847,6 +917,7 @@ function fromLines(lines, columns, lexicon) {
   const rows = [];
   let previous = null;
   let skipped = 0;
+  const bekannt = wortbestand(lexicon);
 
   for (const line of lines) {
     const text = clean(line.text);
@@ -903,13 +974,13 @@ function fromLines(lines, columns, lexicon) {
       // Spalten zu Feldern zusammengesetzt werden.
       const slots = assignByColumns(row.cells, columns.anchors).slots;
       for (const [index, extra] of Object.entries(row.continuation)) {
-        (slots[index] ||= []).push(...extra);
+        haengeFortsetzungAn(slots[index] ||= [], extra, bekannt);
       }
       assigned = slotsToFields(slots, columns.anchors);
     } else {
       assigned = assignByContent(row.cells, lexicon);
       const extra = row.continuation.title;
-      if (extra) assigned.title = clean([assigned.title, ...extra].join(" "));
+      if (extra) assigned.title = clean(haengeFortsetzungAn([assigned.title], extra, bekannt).join(" "));
     }
 
     const title = correct(assigned.title, "title", lexicon);
