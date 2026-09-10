@@ -407,6 +407,9 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
 .hint strong { color: var(--ink); }
 .hint a { color: var(--marke-700); font-weight: 600; }
 .hint a.tam { color: var(--tam-orange); }
+/* Die beiden Produktzeichen erscheinen nur, wenn die Dateien vorliegen. */
+.produkte a { display: inline-flex; align-items: center; gap: 8px; line-height: 1.9; }
+.produkt-logo { width: 22px; height: 22px; border-radius: 5px; flex: none; }
 .lead { margin: 0; font-size: 15px; color: var(--ink); line-height: 1.55; }
 
 .privacy-box {

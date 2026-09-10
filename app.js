@@ -598,11 +598,45 @@ async function importBackup(file) {
 const LOGO_DATEIEN = ["./logo.png", "./logo.svg"];
 const LOGO_MERKER = "federsee.logo";
 
+/**
+ * Das zweite Produktzeichen im Menü. Es ist ein Zusatz, keine Bedingung:
+ * fehlt die Datei, bleibt die Zeile als reiner Text stehen. So laesst sich
+ * das Logo spaeter nachreichen, ohne dass vorher etwas kaputt aussieht.
+ *
+ * Wie beim Kopf-Logo wird das Ergebnis fuer die Sitzung gemerkt. Sonst
+ * kostete jedes Oeffnen des Menues eine vergebliche Anfrage an den Server
+ * und eine Fehlermeldung in der Browserkonsole.
+ */
+const TAM2_DATEI = "./logo-tam2.png";
+const TAM2_MERKER = "federsee.logo.tam2";
+
+function ladeProduktLogos(kopflogo) {
+  // Das FUGO-Zeichen ist dieselbe Datei wie im Kopf -- ohne zweite Anfrage.
+  const fugo = $("#produkt-logo-fugo");
+  if (fugo && kopflogo) { fugo.src = kopflogo; fugo.hidden = false; }
+
+  const tam2 = $("#produkt-logo-tam2");
+  if (!tam2) return;
+
+  let gemerkt = null;
+  try { gemerkt = sessionStorage.getItem(TAM2_MERKER); } catch {}
+  if (gemerkt === "keins") return;
+  if (gemerkt) { tam2.src = gemerkt; tam2.hidden = false; return; }
+
+  const merke = (wert) => { try { sessionStorage.setItem(TAM2_MERKER, wert); } catch {} };
+  const pruefung = new Image();
+  pruefung.onload = () => { tam2.src = TAM2_DATEI; tam2.hidden = false; merke(TAM2_DATEI); };
+  pruefung.onerror = () => merke("keins");
+  pruefung.src = TAM2_DATEI;
+}
+
 function zeigeLogo(pfad) {
   $("#brand-logo").src = pfad;
   $("#brand-logo").hidden = false;
   $("#brand-fallback").hidden = true;
 }
+
+/** Bild als Datei vorhanden? Ein Treffer wird nicht erneut angefragt. */
 
 function ladeLogo() {
   let gemerkt = null;
@@ -611,15 +645,15 @@ function ladeLogo() {
   } catch {
     // Speicher nicht verfügbar -- dann wird eben jedes Mal gesucht.
   }
-  if (gemerkt === "keins") return;
-  if (gemerkt) { zeigeLogo(gemerkt); return; }
+  if (gemerkt === "keins") { ladeProduktLogos(null); return; }
+  if (gemerkt) { zeigeLogo(gemerkt); ladeProduktLogos(gemerkt); return; }
 
   const merke = (wert) => { try { sessionStorage.setItem(LOGO_MERKER, wert); } catch {} };
 
   const versuche = (index) => {
-    if (index >= LOGO_DATEIEN.length) { merke("keins"); return; }
+    if (index >= LOGO_DATEIEN.length) { merke("keins"); ladeProduktLogos(null); return; }
     const pruefung = new Image();
-    pruefung.onload = () => { zeigeLogo(LOGO_DATEIEN[index]); merke(LOGO_DATEIEN[index]); };
+    pruefung.onload = () => { zeigeLogo(LOGO_DATEIEN[index]); merke(LOGO_DATEIEN[index]); ladeProduktLogos(LOGO_DATEIEN[index]); };
     pruefung.onerror = () => versuche(index + 1);
     pruefung.src = LOGO_DATEIEN[index];
   };
