@@ -45,11 +45,17 @@ const TREATMENT_HINT = /(therapie|training|gymnastik|massage|packung|beratung|vo
 const ROOM_CODE = /^(?:[A-ZÄÖÜ]{1,3}[-\s]?\d{1,3}[a-z]?|\d{1,3}[a-z]?)$/;
 
 /**
- * Ein Umbruch innerhalb einer Tabellenzelle klebt an der Zeile darueber;
- * eine neue Tabellenzeile ist durch das Zellpolster deutlich weiter entfernt.
- * Gemessen an echten Plaenen: Umbruch rund 0,3, neue Zeile ab 0,65.
+ * Aeusserster Abstand, in dem eine Zeile ohne Uhrzeit noch zur Zeile darueber
+ * gehoeren kann -- als Vielfaches der Schrifthoehe.
+ *
+ * Nur eine grobe Schranke, bewusst weit. Frueher sollte der Zeilenabstand
+ * allein entscheiden, ob eine Zeile ein Zellumbruch oder eine eigene
+ * Tabellenzeile ist. An abfotografierten Plaenen gemessen trennt er beides
+ * nicht: echte Umbrueche liegen zwischen -0,14 und 0,72, eigenstaendige
+ * Zeilen zwischen -0,14 und 0,69 -- die Bereiche decken sich vollstaendig.
+ * Die Entscheidung faellt deshalb am Inhalt, siehe istFortsetzung().
  */
-const CONTINUATION_GAP = 0.45;
+const CONTINUATION_GAP = 1.6;
 
 /** "2.0G" und "2.O0G" sind verlesene Etagenangaben -- ein haeufiger OCR-Fehler. */
 function tidyLocation(value) {
@@ -81,6 +87,7 @@ const KNOWN_TREATMENTS = [
   "Ergo einzel", "Helparm Üben", "Einführung Helparm", "Schlingentisch", "Nachsorgevortrag",
   "Begrüßungsvortrag", "Stressbewältigung", "Nordic Walking Info", "Info Ernährung",
   "Oase am Mittag", "Fahrgeld", "Visite", "Eigentraining Therme",
+  "Beruf und Sozialrecht", "Beruf und Sozialberatung",
   "Frühstück", "Mittagessen", "Abendessen", "Zwischenmahlzeit", "Anreise", "Abreise",
 ];
 
@@ -323,30 +330,34 @@ const KLEINE_EIGENSTAENDIGE_WOERTER = new Set([
   "der", "die", "das", "den", "dem", "des", "von", "vom", "fur", "uhr", "ab", "bis",
 ]);
 
-/** Alle Einzelwoerter des Grundbestands -- einmal aufgebaut, nicht je Zeile. */
-const GRUNDWOERTER = (() => {
-  const menge = new Set();
+/** Grundbestand, einmal aufgebaut: ganze Begriffe und ihre Einzelwoerter. */
+const GRUNDBESTAND = (() => {
+  const woerter = new Set();
+  const begriffe = new Set();
   for (const eintrag of [...KNOWN_LOCATIONS, ...KNOWN_TREATMENTS]) {
+    begriffe.add(foldForCompare(eintrag));
     for (const wort of String(eintrag).split(/[\s/]+/)) {
       const gefaltet = foldForCompare(wort);
-      if (gefaltet.length >= 3) menge.add(gefaltet);
+      if (gefaltet.length >= 3) woerter.add(gefaltet);
     }
   }
-  return menge;
+  return { woerter, begriffe };
 })();
 
-/** Grundbestand samt gelernter Begriffe, ebenfalls in Einzelwoerter zerlegt. */
+/** Grundbestand samt der Begriffe, die dieses Geraet schon gelernt hat. */
 function wortbestand(lexicon = {}) {
-  const menge = new Set(GRUNDWOERTER);
+  const woerter = new Set(GRUNDBESTAND.woerter);
+  const begriffe = new Set(GRUNDBESTAND.begriffe);
   for (const feld of ["title", "location", "practitioner"]) {
     for (const term of Object.keys(lexicon[feld] || {})) {
+      begriffe.add(foldForCompare(term));
       for (const wort of String(term).split(/[\s/]+/)) {
         const gefaltet = foldForCompare(wort);
-        if (gefaltet.length >= 3) menge.add(gefaltet);
+        if (gefaltet.length >= 3) woerter.add(gefaltet);
       }
     }
   }
-  return menge;
+  return { woerter, begriffe };
 }
 
 /**
@@ -368,10 +379,50 @@ function istWortrest(vorher, bruchstueck, bekannt) {
   const letztes = vorher.split(/\s+/).pop();
   // Nur an einen Wortanfang anschliessen -- nicht an "33" oder "Pr.".
   if (!/[A-Za-zÄÖÜäöüß]$/.test(letztes)) return false;
-  if (bekannt.has(foldForCompare(letztes + bruchstueck))) return true;
+  if (bekannt.woerter.has(foldForCompare(letztes + bruchstueck))) return true;
   // Sonst nur, wenn der Anfang selbst kein vollstaendiges Wort ist und der
   // Rest sehr kurz bleibt: "Ergo" / "einzel" bleiben so zwei Woerter.
-  return bruchstueck.length <= 3 && !bekannt.has(foldForCompare(letztes));
+  return bruchstueck.length <= 3 && !bekannt.woerter.has(foldForCompare(letztes));
+}
+
+/**
+ * Woerter, nach denen eine Zelle unmoeglich zu Ende ist: "Haus am ...",
+ * "Beruf und ...". Sie stehen auf diesen Plaenen nie am Zeilenende.
+ */
+const OFFENES_ENDE = /(?:^|\s)(?:und|oder|am|im|in|an|auf|aus|bei|mit|von|vom|zum|zur|der|die|das|den|dem|des|für|fuer|u\.|&|-|\/)$/i;
+
+/**
+ * Entscheidet, ob eine Zeile ohne Uhrzeit die Fortsetzung der Zelle darueber
+ * ist oder eine eigenstaendige Tabellenzeile.
+ *
+ * Frueher entschied das der Zeilenabstand. An echten Fotos nachgemessen
+ * taugt er dafuer nicht: "Sozialrecht" -- die Fortsetzung von "Beruf und" --
+ * steht 0,72 Schrifthoehen unter seiner Zeile, waehrend die eigenstaendige
+ * Zeile "MTT Eigentraining" auf denselben Plaenen bei 0,05 liegt. Ein
+ * Schwellenwert kann beides nicht trennen.
+ *
+ * Der Inhalt kann es: Eine Zelle, die auf "am" oder "und" endet, ist
+ * offensichtlich nicht zu Ende. Ein angeschnittenes Wort ("Patientenzimm")
+ * ebensowenig. Steht dort dagegen ein vollstaendiger, bekannter Begriff
+ * ("Abendessen"), faengt darunter etwas Neues an.
+ */
+function istFortsetzung(bisher, fragment, bekannt) {
+  const anfang = clean(bisher);
+  if (!anfang || !clean(fragment)) return false;
+
+  // 1. Die Zelle endet auf ein Binde- oder Fuellwort.
+  if (OFFENES_ENDE.test(anfang)) return true;
+
+  // 2. Beide Teile ergeben zusammen einen bekannten Begriff. Das greift ab
+  //    dem zweiten Scan auch fuer Anwendungen, die nur dieses Haus kennt.
+  if (bekannt.begriffe.has(foldForCompare(`${anfang} ${fragment}`))) return true;
+
+  // 3. Das letzte Wort der Zelle ist selbst kein bekanntes Wort -- dann ist es
+  //    angeschnitten. Ziffern und Kuerzel ("2. OG", "Pr. 33") zaehlen nicht.
+  const letztes = anfang.split(/\s+/).pop().replace(/[^\wÄÖÜäöüß]+$/, "");
+  if (letztes.length >= 4 && !/\d/.test(letztes) && !bekannt.woerter.has(foldForCompare(letztes))) return true;
+
+  return false;
 }
 
 /** Haengt die Zellen einer Folgezeile an -- Wortreste ohne Leerzeichen. */
@@ -928,9 +979,8 @@ function fromLines(lines, columns, lexicon) {
 
     if (!stamp) {
       // Zeile ohne Uhrzeit: entweder der Umbruch einer Tabellenzelle oder eine
-      // eigenstaendige Zeile ohne Zeitangabe. Der Zeilenabstand trennt beides
-      // zuverlaessig -- ein Umbruch klebt an der Zeile darueber (rund 0,3 der
-      // Schrifthoehe), eine neue Tabellenzeile hat das Zellpolster dazwischen.
+      // eigenstaendige Zeile ohne Zeitangabe. Welches von beidem, entscheidet
+      // der Inhalt der Zelle darueber -- Spalte fuer Spalte.
       const cells = splitCells(line.words, line.height);
       if (!cells.length) continue;
       // "MTT Eigentraining" steht als eigene Tabellenzeile ohne Uhrzeit und
@@ -938,19 +988,25 @@ function fromLines(lines, columns, lexicon) {
       // fuer sich stehender Begriff ist nie die Fortsetzung eines anderen.
       const own = clean(line.words.map((word) => word.text).join(" "));
       const standsAlone = Boolean(bestMatch(own, [...KNOWN_TREATMENTS, ...Object.keys(lexicon.title || {})]));
-      const isWrap = previous
-        && !standsAlone
-        && line.top - previous.bottom < previous.height * CONTINUATION_GAP;
-      if (isWrap) {
+      const inReichweite = previous && line.top - previous.bottom < previous.height * CONTINUATION_GAP;
+
+      let angehaengt = 0;
+      if (inReichweite && !standsAlone) {
         for (const cell of cells) {
-          if (columns) {
-            const index = columnIndexAt(columns.anchors, cell);
-            if (columns.anchors[index].role === "time") continue;
-            (previous.row.continuation[index] ||= []).push(cell.text);
-          } else {
-            (previous.row.continuation.title ||= []).push(cell.text);
-          }
+          const index = columns ? columnIndexAt(columns.anchors, cell) : "title";
+          if (columns && columns.anchors[index].role === "time") continue;
+          const slot = (previous.row.slots[index] ||= []);
+          if (!istFortsetzung(slot.join(" "), cell.text, bekannt)) continue;
+          haengeFortsetzungAn(slot, [cell.text], bekannt);
+          angehaengt += 1;
         }
+      }
+
+      if (angehaengt) {
+        // Eine Zelle kann ueber drei Zeilen laufen: der naechste Umbruch misst
+        // seinen Abstand ab hier, nicht ab der Zeile mit der Uhrzeit.
+        previous.bottom = line.bottom;
+        previous.height = line.height;
       } else {
         skipped += 1;
         previous = null;
@@ -961,7 +1017,10 @@ function fromLines(lines, columns, lexicon) {
     const cells = splitCells(stamp.rest, line.height);
     if (!cells.length) { previous = null; continue; }
 
-    const row = { time: stamp.time, end: stamp.end, cells, continuation: {}, confidence: Math.min(line.confidence, ...cells.map((cell) => cell.confidence)) };
+    // Die Spalten-Slots entstehen sofort: die naechste Zeile muss wissen, was
+    // in ihrer Spalte bereits steht, um ueber eine Fortsetzung zu entscheiden.
+    const slots = columns ? assignByColumns(cells, columns.anchors).slots : { title: [] };
+    const row = { time: stamp.time, end: stamp.end, cells, slots, confidence: Math.min(line.confidence, ...cells.map((cell) => cell.confidence)) };
     rows.push(row);
     previous = { row, bottom: line.bottom, height: line.height };
   }
@@ -970,17 +1029,13 @@ function fromLines(lines, columns, lexicon) {
   const items = rows.map((row) => {
     let assigned;
     if (columns) {
-      // Die Fortsetzung wird in ihren eigenen Slot einsortiert, bevor die
-      // Spalten zu Feldern zusammengesetzt werden.
-      const slots = assignByColumns(row.cells, columns.anchors).slots;
-      for (const [index, extra] of Object.entries(row.continuation)) {
-        haengeFortsetzungAn(slots[index] ||= [], extra, bekannt);
-      }
-      assigned = slotsToFields(slots, columns.anchors);
+      // Die Fortsetzungen stehen schon in ihren Slots -- hier werden die
+      // Spalten nur noch zu Feldern zusammengesetzt.
+      assigned = slotsToFields(row.slots, columns.anchors);
     } else {
       assigned = assignByContent(row.cells, lexicon);
-      const extra = row.continuation.title;
-      if (extra) assigned.title = clean(haengeFortsetzungAn([assigned.title], extra, bekannt).join(" "));
+      const extra = row.slots.title;
+      if (extra.length) assigned.title = clean(haengeFortsetzungAn([assigned.title], extra, bekannt).join(" "));
     }
 
     const title = correct(assigned.title, "title", lexicon);
