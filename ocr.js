@@ -113,14 +113,42 @@ function enhance(source, width, height, bereitsSkaliert = false) {
   return canvas;
 }
 
-function loadImage(file) {
+function alsBild(file) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     const url = URL.createObjectURL(file);
     image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
-    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Das Bild konnte nicht gelesen werden.")); };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode")); };
     image.src = url;
   });
+}
+
+/**
+ * Bild aus einer Datei holen.
+ *
+ * Zwei Wege, weil ein Weg allein nicht reicht: Der uebliche ueber ein
+ * Bild-Element scheitert auf manchen Geraeten an HEIC, dem Standardformat der
+ * iPhone-Kamera. createImageBitmap kommt in einigen dieser Faelle weiter.
+ * Klappt beides nicht, sagt die Meldung, woran es liegt und was hilft --
+ * "konnte nicht gelesen werden" allein laesst den Nutzer ratlos zurueck.
+ */
+async function loadImage(file) {
+  try {
+    return await alsBild(file);
+  } catch {
+    // Weiter zum zweiten Weg.
+  }
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(file);
+    } catch {
+      // Auch das hat nicht geholfen.
+    }
+  }
+  const heic = /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type || "");
+  throw new Error(heic
+    ? `„${file.name}" liegt im iPhone-Format HEIC vor, das dieses Gerät nicht öffnen kann. Abhilfe: das Bild in der Fotos-App über „Teilen → Bild sichern" als JPEG ablegen, oder unter Einstellungen → Kamera → Formate auf „Maximale Kompatibilität" umstellen.`
+    : `„${file.name}" konnte nicht als Bild geöffnet werden. Bitte ein JPEG oder PNG wählen.`);
 }
 
 /* ----------------------------------------------------------------- PDF */

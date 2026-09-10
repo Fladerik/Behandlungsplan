@@ -297,13 +297,35 @@ export function entzerre(quelle, breite, hoehe, zielBreiteMax = ZIEL_BREITE) {
  * noetig ist. Fuer ein Ziel von 2600 Pixeln Breite genuegt gut das
  * Anderthalbfache an Quellaufloesung.
  */
+/**
+ * Groesste Flaeche, die ein Canvas haben darf -- in Bildpunkten.
+ *
+ * Safari auf iPhone und iPad begrenzt die Flaeche eines Canvas hart auf rund
+ * 16,7 Megapixel. Wird die Grenze ueberschritten, kommt keine Fehlermeldung:
+ * getImageData liefert ein leeres Bild zurueck, und die Texterkennung findet
+ * auf einer weissen Flaeche nichts. Auf einem Rechner faellt das nie auf,
+ * dort gibt es diese Grenze nicht.
+ *
+ * Der Wert liegt bewusst deutlich darunter, denn neben der Quelle liegt
+ * gleichzeitig das entzerrte Zielbild im Speicher, und beide werden als
+ * Bilddaten kopiert -- vier Byte je Bildpunkt.
+ */
+const MAX_QUELL_FLAECHE = 12e6;
+
 function zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe) {
   // Grosszuegig gewaehlt: Jede Verkleinerung vor der Transformation kostet
   // Schaerfe, die die spaetere Abtastung nicht zurueckholt. Erst bei sehr
   // grossen Aufnahmen wird ueberhaupt verkleinert -- ein uebliches
   // Handyfoto mit 12 Megapixeln bleibt unangetastet.
   const maxQuelle = Math.max(4500, zielBreite * 2);
-  const schrumpf = Math.min(1, maxQuelle / breite);
+  // Neben der Breite begrenzt auch die Flaeche. Ein iPhone liefert je nach
+  // Modell 24 oder 48 Megapixel; ohne diese Schranke entstuende ein Canvas,
+  // das Safari nicht mehr zeichnet.
+  const schrumpf = Math.min(
+    1,
+    maxQuelle / breite,
+    Math.sqrt(MAX_QUELL_FLAECHE / (breite * hoehe)),
+  );
   const quellBreite = Math.max(1, Math.round(breite * schrumpf));
   const quellHoehe = Math.max(1, Math.round(hoehe * schrumpf));
 
