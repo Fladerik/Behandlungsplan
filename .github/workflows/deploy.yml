@@ -1,0 +1,75 @@
+# Veröffentlicht die App auf dem Webspace.
+#
+# Ablauf: Wird auf den Entwicklungszweig geschoben, landet die Änderung
+# automatisch im Testverzeichnis. Der Weg in das öffentliche Verzeichnis wird
+# von Hand ausgelöst -- eine Veröffentlichung für alle Patienten soll eine
+# bewusste Entscheidung bleiben, kein Nebeneffekt eines Commits.
+#
+# Die Zugangsdaten liegen als "Secrets" im Repository (Settings → Secrets and
+# variables → Actions). Sie sind für niemanden einsehbar, auch nicht in den
+# Protokollen der Abläufe.
+
+name: Auf Webspace veröffentlichen
+
+on:
+  push:
+    branches:
+      - claude/**
+    paths-ignore:
+      - "README.md"
+      - "werkzeuge/**"
+      - ".github/**"
+  workflow_dispatch:
+    inputs:
+      ziel:
+        description: "Wohin veröffentlichen?"
+        required: true
+        default: "test"
+        type: choice
+        options:
+          - test
+          - produktiv
+
+jobs:
+  veroeffentlichen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stand holen
+        uses: actions/checkout@v4
+
+      - name: Zielverzeichnis bestimmen
+        id: ziel
+        run: |
+          if [ "${{ github.event.inputs.ziel }}" = "produktiv" ]; then
+            echo "pfad=${{ vars.FTP_PFAD_PRODUKTIV || '/federsee/' }}" >> "$GITHUB_OUTPUT"
+            echo "name=öffentliches Verzeichnis" >> "$GITHUB_OUTPUT"
+          else
+            echo "pfad=${{ vars.FTP_PFAD_TEST || '/federsee-test/' }}" >> "$GITHUB_OUTPUT"
+            echo "name=Testverzeichnis" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Übertragen
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_BENUTZER }}
+          password: ${{ secrets.FTP_PASSWORT }}
+          # Verschlüsselt übertragen. Ohne dies ginge das Passwort im
+          # Klartext über die Leitung.
+          protocol: ftps
+          server-dir: ${{ steps.ziel.outputs.pfad }}
+          # Es werden nur geänderte Dateien übertragen. Der Stand wird in
+          # einer Datei auf dem Server vermerkt; die 11 MB Spracherkennung
+          # gehen also nur beim ersten Mal über die Leitung.
+          state-name: .deploy-stand.json
+          exclude: |
+            **/.git*
+            **/.git*/**
+            werkzeuge/**
+            README.md
+            .github/**
+
+      - name: Ergebnis
+        run: |
+          echo "Veröffentlicht in ${{ steps.ziel.outputs.name }} (${{ steps.ziel.outputs.pfad }})."
+          echo "Bitte pruefen.html aufrufen, um die Vollständigkeit zu bestätigen."

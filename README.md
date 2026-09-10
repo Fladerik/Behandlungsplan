@@ -10,7 +10,7 @@ oder als PDF hochladen. Die Termine werden erkannt, einmal geprüft und liegen
 danach dauerhaft auf dem eigenen Gerät – ohne Anmeldung, ohne Server, ohne
 Datenübertragung.
 
-## Hochladen auf Strato
+## Veröffentlichen
 
 Die App ist für eine öffentliche Adresse gedacht, die alle Patientinnen und
 Patienten aufrufen – etwa per QR-Code:
@@ -19,12 +19,53 @@ Patienten aufrufen – etwa per QR-Code:
 https://www.cameraorganizer.com/federsee/
 ```
 
-Den kompletten Ordnerinhalt per FTP in dieses Verzeichnis kopieren. Es ist
+Es gibt zwei Wege dorthin: automatisch über GitHub oder von Hand per FTP.
+
+### Automatisch (empfohlen)
+
+`.github/workflows/deploy.yml` überträgt die App auf den Webspace, sobald eine
+Änderung in den Entwicklungszweig geschoben wird. Der Weg ins öffentliche
+Verzeichnis wird von Hand ausgelöst – eine Veröffentlichung für alle Patienten
+soll eine bewusste Entscheidung bleiben, kein Nebeneffekt eines Commits.
+
+**Einmalig einzurichten** (im GitHub-Repository unter *Settings → Secrets and
+variables → Actions*):
+
+| Art | Name | Wert |
+|---|---|---|
+| Secret | `FTP_SERVER` | Der FTP-Server von Strato, z. B. `ftp.strato.de` |
+| Secret | `FTP_BENUTZER` | FTP-Benutzername aus dem Strato-Kundenbereich |
+| Secret | `FTP_PASSWORT` | Das zugehörige Passwort |
+| Variable | `FTP_PFAD_TEST` | Testverzeichnis, Standard `/federsee-test/` |
+| Variable | `FTP_PFAD_PRODUKTIV` | Öffentliches Verzeichnis, Standard `/federsee/` |
+
+Die Zugangsdaten liegen damit im Repository und nicht in einer Unterhaltung.
+Sie sind auch in den Ablaufprotokollen nicht einsehbar.
+
+**Veröffentlichen ins öffentliche Verzeichnis:** im Repository unter *Actions →
+„Auf Webspace veröffentlichen" → Run workflow → produktiv*.
+
+Zwei Eigenschaften des Ablaufs sind wichtig:
+
+- Die Übertragung läuft über **FTPS**, also verschlüsselt. Einfaches FTP würde
+  das Passwort im Klartext über die Leitung schicken.
+- Es werden **nur geänderte Dateien** übertragen. Die 11 MB Spracherkennung
+  gehen nur beim ersten Mal über die Leitung; spätere Aktualisierungen dauern
+  Sekunden.
+
+### Von Hand
+
+Den kompletten Ordnerinhalt per FTP in das Zielverzeichnis kopieren. Es ist
 keine Datenbank, kein PHP und kein Benutzerkonto nötig. Alle Pfade im Code sind
-relativ, das Unterverzeichnis funktioniert daher ohne Anpassung.
+relativ, ein Unterverzeichnis funktioniert daher ohne Anpassung.
+
+Am bequemsten geht das über den **Datei-Manager im Strato-Kundenbereich**
+(*Paket verwalten → Webspace-Verwaltung → Datei-Manager*) – ohne FTP-Programm,
+per Drag-and-drop.
 
 ```
-index.html  styles.css  app.js  store.js  parser.js  ocr.js  ics.js
+index.html  pruefen.html  rechtliches.html  styles.css
+app.js  store.js  parser.js  ocr.js  deskew.js  ics.js
 service-worker.js  manifest.webmanifest  icon.svg  .htaccess
 vendor/     (Texterkennung und PDF-Anzeige)
 tessdata/   (deutsches Sprachmodell, ca. 7 MB)
@@ -33,10 +74,13 @@ tessdata/   (deutsches Sprachmodell, ca. 7 MB)
 Zwei Voraussetzungen:
 
 1. **HTTPS muss aktiv sein.** Ohne HTTPS erlauben Browser weder Kamera noch
-   Offline-Betrieb. Bei Strato im Kundenbereich unter „SSL-Verwaltung“.
+   Offline-Betrieb. Bei Strato im Kundenbereich unter „SSL-Verwaltung".
 2. **`.htaccess` muss mit übertragen werden.** Viele FTP-Programme blenden
    Dateien mit führendem Punkt aus; im FTP-Programm „versteckte Dateien
-   anzeigen“ einschalten.
+   anzeigen" einschalten.
+
+Nach jedem Hochladen `pruefen.html` aufrufen: Die Seite fragt alle benötigten
+Dateien einzeln beim Server ab und meldet fehlende oder unvollständige.
 
 Nach einer Aktualisierung genügt es, die geänderten Dateien zu überschreiben.
 Der Service Worker holt den Programmcode zuerst aus dem Netz, neue Versionen
