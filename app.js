@@ -574,10 +574,12 @@ async function importBackup(file) {
   try {
     const text = await file.text();
     const merge = confirm("Bestehende Termine behalten und die Sicherung nur ergänzen?\n\nOK = ergänzen · Abbrechen = alles durch die Sicherung ersetzen");
-    store.importBackup(text, { mode: merge ? "merge" : "replace" });
+    const ergebnis = store.importBackup(text, { mode: merge ? "merge" : "replace" });
     store.flush();
     render();
-    toast("Sicherung eingelesen.");
+    toast(ergebnis.verworfen
+      ? `${ergebnis.tage} Tage eingelesen, ${ergebnis.verworfen} unlesbare übersprungen.`
+      : `Sicherung eingelesen: ${ergebnis.tage} Tage.`, 4200);
   } catch (error) {
     toast(`Die Datei konnte nicht gelesen werden: ${error.message}`);
   }

@@ -151,22 +151,72 @@ export function normalizeTime(raw = "") {
 const iso = (year, month, day) =>
   (!year || !month || !day || month > 12 || day > 31) ? "" : `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-export function parseGermanDate(text, fallbackYear = new Date().getFullYear()) {
+/**
+ * Waehlt das Jahr, wenn der Plan keines nennt.
+ *
+ * Ein Aufenthalt ueber Silvester ist der Ernstfall: Wird ein Plan Ende
+ * Dezember gescannt und nennt eine Zeile "Samstag 02. Januar", gehoert dieser
+ * Tag ins Folgejahr. Das laufende Jahr einzusetzen legt den Termin ein Jahr
+ * in die Vergangenheit -- er taucht in der Hauptansicht nie auf.
+ *
+ * Entschieden wird in zwei Stufen: Nennt der Text einen Wochentag, ist das
+ * Jahr damit eindeutig bestimmt (derselbe Kalendertag faellt in benachbarten
+ * Jahren auf verschiedene Wochentage). Sonst gewinnt das Jahr, dessen Datum
+ * dem Bezugstag am naechsten liegt.
+ */
+function waehleJahr(tag, monat, text, bezug) {
+  const bezugsTag = bezug instanceof Date ? bezug : new Date(`${bezug}T12:00:00`);
+  const basis = bezugsTag.getFullYear();
+  const kandidaten = [basis, basis + 1, basis - 1]
+    .map((jahr) => ({ jahr, datum: new Date(jahr, monat - 1, tag, 12) }))
+    .filter((eintrag) => eintrag.datum.getMonth() === monat - 1);   // 29. Februar
+
+  if (!kandidaten.length) return basis;
+
+  const genannt = String(text).toLocaleLowerCase("de-DE").match(WEEKDAY_PATTERN);
+  if (genannt) {
+    const gesucht = genannt[1] === "sonnabend" ? "samstag" : genannt[1];
+    const treffer = kandidaten.filter((eintrag) => WEEKDAYS[eintrag.datum.getDay()] === gesucht);
+    if (treffer.length === 1) return treffer[0].jahr;
+    if (treffer.length > 1) kandidaten.length = 0, kandidaten.push(...treffer);
+  }
+
+  return kandidaten
+    .sort((a, b) => Math.abs(a.datum - bezugsTag) - Math.abs(b.datum - bezugsTag))[0].jahr;
+}
+
+/**
+ * @param {string} text
+ * @param {string|Date|number} bezug  Bezugstag fuer Angaben ohne Jahr
+ *                                    (ein Jahr als Zahl wird weiterhin angenommen)
+ */
+export function parseGermanDate(text, bezug = new Date()) {
   const source = String(text || "");
+  const bezugsTag = typeof bezug === "number" ? new Date(bezug, 6, 1) : bezug;
+
   const written = source.toLocaleLowerCase("de-DE")
     .match(new RegExp(`\\b([0-3]?\\d)\\.?\\s*(${MONTH_NAMES})\\.?\\s*((?:20)?\\d{2})?`));
   if (written) {
-    const rawYear = written[3];
-    const year = rawYear ? (rawYear.length === 2 ? Number(`20${rawYear}`) : Number(rawYear)) : fallbackYear;
-    return iso(year, MONTHS[written[2]], Number(written[1]));
+    const tag = Number(written[1]);
+    const monat = MONTHS[written[2]];
+    const rohJahr = written[3];
+    const jahr = rohJahr
+      ? (rohJahr.length === 2 ? Number(`20${rohJahr}`) : Number(rohJahr))
+      : waehleJahr(tag, monat, source, bezugsTag);
+    return iso(jahr, monat, tag);
   }
+
   const numeric = source.match(/\b([0-3]?\d)\s*[.\/-]\s*([01]?\d)\s*[.\/-]\s*((?:20)?\d{2})\b/);
   if (numeric) {
-    const year = numeric[3].length === 2 ? Number(`20${numeric[3]}`) : Number(numeric[3]);
-    return iso(year, Number(numeric[2]), Number(numeric[1]));
+    const jahr = numeric[3].length === 2 ? Number(`20${numeric[3]}`) : Number(numeric[3]);
+    return iso(jahr, Number(numeric[2]), Number(numeric[1]));
   }
+
   const short = source.match(/\b([0-3]?\d)\s*\.\s*([01]?\d)\s*\.(?!\d)/);
-  return short ? iso(fallbackYear, Number(short[2]), Number(short[1])) : "";
+  if (!short) return "";
+  const tag = Number(short[1]);
+  const monat = Number(short[2]);
+  return iso(waehleJahr(tag, monat, source, bezugsTag), monat, tag);
 }
 
 export const weekdayOf = (isoDate) => WEEKDAYS[new Date(`${isoDate}T12:00:00`).getDay()];
@@ -463,12 +513,12 @@ function isNoteLine(text) {
 const isColumnHeading = (text) => COLUMN_ROLES.some((entry) => entry.pattern.test(text.trim()));
 
 /** "Donnerstag 03. September 2026" -- eine Zeile, die nur einen Tag benennt. */
-function dayHeadingDate(line, fallbackYear) {
+function dayHeadingDate(line, bezugstag) {
   const text = clean(line.text);
   if (!WEEKDAY_PATTERN.test(text)) return "";
   if (/\d{1,2}\s*[:.]\s*\d{2}/.test(text)) return "";   // enthaelt eine Uhrzeit -> Hinweis
   if (text.length > 46) return "";
-  const date = parseGermanDate(text, fallbackYear);
+  const date = parseGermanDate(text, bezugstag);
   if (!date) return "";
   return dateMatchesWeekday(date, text) === false ? "" : date;
 }
@@ -631,14 +681,14 @@ function minutesBetween(start, end) {
 /**
  * @returns {{days: Array<{date: string, items: Array}>, warnings: string[], confidence: number, skipped: number}}
  */
-export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date().getFullYear() } = {}) {
+export function parsePage(tsv, fullText, { lexicon = {}, bezugstag = new Date() } = {}) {
   const lines = tsvLines(tsv);
   const warnings = [];
 
   if (!lines.length) {
     const items = fromPlainText(fullText || "", lexicon);
     const textLines = String(fullText || "").split(/\r?\n/).map((text) => ({ text }));
-    const date = headerDate(textLines, fullText, fallbackYear);
+    const date = headerDate(textLines, fullText, bezugstag);
     return { days: items.length ? [{ date, items }] : [], warnings, confidence: 0, skipped: 0 };
   }
 
@@ -651,13 +701,13 @@ export function parsePage(tsv, fullText, { lexicon = {}, fallbackYear = new Date
   }
 
   const columns = findColumns(lines);
-  const sections = splitIntoDays(lines, fallbackYear);
+  const sections = splitIntoDays(lines, bezugstag);
 
   if (!sections.length) {
     // Kein Tagesabschnitt im Tabellenkoerper: die ganze Seite gilt als ein Tag,
     // dessen Datum aus dem Seitenkopf stammt. Gewarnt wird nur, wenn auch dort
     // keines steht -- nicht schon, weil die Datumszeile fehlt.
-    const date = headerDate(lines, fullText, fallbackYear);
+    const date = headerDate(lines, fullText, bezugstag);
     if (!date) {
       warnings.push("Für diesen Plan wurde kein Tagesdatum gefunden – auf der Seite steht nur ein Anreise- oder Druckdatum. Bitte das Datum oben selbst eintragen.");
     }
@@ -712,14 +762,14 @@ const FREMDES_DATUM = /(anreise|abreise|zuletzt gedruckt|gedruckt am|geburt|aufn
  * Datum dort verdaechtig -- dann wird lieber keines geraten. Ein leeres
  * Datumsfeld faellt in der Pruefung auf, ein falsches nicht.
  */
-function headerDate(lines, fullText, fallbackYear) {
+function headerDate(lines, fullText, bezugstag) {
   // Auf den zusammengefuehrten Zeilen arbeiten: die kennen die raeumliche
   // Nachbarschaft und halten "Anreise: 02.09.2026" zusammen.
   const kandidaten = [];
   for (const line of lines) {
     const text = clean(line.text);
     if (FREMDES_DATUM.test(text)) continue;
-    const datum = parseGermanDate(text, fallbackYear);
+    const datum = parseGermanDate(text, bezugstag);
     if (datum) kandidaten.push({ datum, text });
   }
   if (kandidaten.length) return kandidaten[0].datum;
@@ -727,15 +777,15 @@ function headerDate(lines, fullText, fallbackYear) {
   // Keine unverdaechtige Zeile gefunden. Enthaelt die Seite ueberhaupt ein
   // Anreise- oder Druckdatum, wird nicht geraten.
   if (lines.some((line) => FREMDES_DATUM.test(line.text))) return "";
-  return parseGermanDate(fullText || "", fallbackYear) || "";
+  return parseGermanDate(fullText || "", bezugstag) || "";
 }
 
 /** Zerlegt die Seite an den Datumszeilen in Tagesabschnitte. */
-function splitIntoDays(lines, fallbackYear) {
+function splitIntoDays(lines, bezugstag) {
   const sections = [];
   let current = null;
   for (const line of lines) {
-    const date = dayHeadingDate(line, fallbackYear);
+    const date = dayHeadingDate(line, bezugstag);
     if (date) {
       current = { date, lines: [] };
       sections.push(current);

@@ -142,6 +142,19 @@ Zwei weitere Eigenheiten echter Pläne sind berücksichtigt:
 Zeilen ohne Uhrzeit („Eigentraining Therme") werden nicht übernommen. Die
 Prüfansicht nennt ihre Anzahl, damit nichts unbemerkt verloren geht.
 
+### Das richtige Jahr
+
+Nennt eine Datumszeile kein Jahr, wird es aus dem Zusammenhang bestimmt. Der
+Ernstfall ist ein Aufenthalt über Silvester: Wird ein Plan Ende Dezember
+gescannt und nennt eine Zeile „Samstag 02. Januar", gehört dieser Tag ins
+Folgejahr. Das laufende Jahr einzusetzen legt den Termin ein Jahr in die
+Vergangenheit – er taucht in der Hauptansicht nie auf.
+
+Entschieden wird in zwei Stufen: Nennt der Text einen Wochentag, ist das Jahr
+damit eindeutig bestimmt, denn derselbe Kalendertag fällt in benachbarten
+Jahren auf verschiedene Wochentage. Sonst gewinnt das Jahr, dessen Datum dem
+Bezugstag am nächsten liegt.
+
 ### Kein geratenes Datum
 
 Auf Klinikplänen steht im Seitenkopf das Anreise- und Druckdatum, nicht der

@@ -182,7 +182,10 @@ export function nextAppointment(now = new Date()) {
   for (const day of allDays()) {
     if (day.date < today) continue;
     for (const item of day.items) {
-      if (item.done) continue;
+      // Ein Eintrag ohne Uhrzeit oder ohne Bezeichnung taugt nicht als
+      // Wegweiser -- er wuerde im Kasten oben als "Ohne Bezeichnung"
+      // erscheinen und den echten naechsten Termin verdecken.
+      if (item.done || !item.time || !item.title.trim()) continue;
       if (day.date > today) return { day, item, laeuft: false };
       const ende = endeInMinuten(item);
       if (ende > minutenJetzt) {
@@ -339,18 +342,63 @@ export function exportBackup() {
   return JSON.stringify({ ...state, exportedAt: new Date().toISOString() }, null, 2);
 }
 
+/**
+ * Prueft einen eingelesenen Tag und gibt ihn in gueltiger Form zurueck --
+ * oder null, wenn er unbrauchbar ist.
+ *
+ * Eine Sicherungsdatei kann beschaedigt sein oder aus einer anderen Anwendung
+ * stammen. Frueher genuegte das blosse Vorhandensein eines Feldes "days";
+ * eine Datei wie {"days":"kaputt"} wurde uebernommen und machte den Plan
+ * unbrauchbar. Geprueft wird deshalb die Form, nicht nur der Name.
+ */
+function pruefeTag(iso, roh) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  if (!roh || typeof roh !== "object" || !Array.isArray(roh.items)) return null;
+
+  const items = roh.items
+    .filter((item) => item && typeof item === "object")
+    .map(normalizeItem)
+    .filter((item) => item.title || item.time);
+
+  return items.length ? { date: iso, items, importedAt: roh.importedAt || Date.now(), source: roh.source || "Sicherung" } : null;
+}
+
 export function importBackup(json, { mode = "replace" } = {}) {
   const data = JSON.parse(json);
-  if (!data || typeof data !== "object" || !data.days) throw new Error("Die Datei enthaelt keinen Terminplan.");
+  if (!data || typeof data !== "object" || !data.days || typeof data.days !== "object" || Array.isArray(data.days)) {
+    throw new Error("Die Datei enthaelt keinen Terminplan.");
+  }
+
+  // Erst vollstaendig pruefen, dann uebernehmen: ein halb eingelesener
+  // Bestand waere schlimmer als ein abgelehnter.
+  const geprueft = {};
+  let verworfen = 0;
+  for (const [iso, roh] of Object.entries(data.days)) {
+    const tag = pruefeTag(iso, roh);
+    if (tag) geprueft[iso] = tag;
+    else verworfen += 1;
+  }
+
+  if (!Object.keys(geprueft).length) {
+    throw new Error("In der Datei stehen keine lesbaren Termine.");
+  }
+
   if (mode === "merge") {
-    for (const [iso, day] of Object.entries(data.days)) {
-      if (!state.days[iso]) state.days[iso] = day;
+    for (const [iso, tag] of Object.entries(geprueft)) {
+      if (!state.days[iso]) state.days[iso] = tag;
     }
   } else {
-    state = { ...emptyState(), ...data };
+    state = {
+      ...emptyState(),
+      days: geprueft,
+      profile: { ...emptyState().profile, ...(typeof data.profile === "object" ? data.profile : {}) },
+      settings: { ...emptyState().settings, ...(typeof data.settings === "object" ? data.settings : {}) },
+      lexicon: { ...emptyState().lexicon, ...(typeof data.lexicon === "object" ? data.lexicon : {}) },
+    };
   }
+
   commit({ type: "restored" });
-  return state;
+  return { tage: Object.keys(geprueft).length, verworfen };
 }
 
 export function clearAll() {
