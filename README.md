@@ -221,10 +221,8 @@ der Vorlage.
 
 ## Impressum
 
-`rechtliches.html` enthält Impressum und Datenschutzerklärung. **Die
-Impressumsangaben sind Platzhalter** und müssen vor der Veröffentlichung durch
-die tatsächlichen Daten ersetzt werden — sie stehen im Abschnitt „Angaben gemäß
-§ 5 DDG" in eckigen Klammern.
+`rechtliches.html` enthält Impressum und Datenschutzerklärung, verlinkt aus der
+Fußzeile und aus dem Menü. Die Angaben nach § 5 DDG sind eingetragen.
 
 ## Datenschutz
 
