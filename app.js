@@ -1,11 +1,12 @@
 /**
- * Federsee Terminplan -- Oberfläche.
+ * Terminplan -- Oberfläche.
  *
  * Ablauf: Plan scannen -> prüfen -> speichern. Gespeichert wird ausschließlich
  * lokal; beim Schließen der Seite geht nichts verloren, beim erneuten Öffnen
  * ist alles wieder da.
  */
 
+import { ANWENDUNG } from "./konfiguration.js";
 import * as store from "./store.js";
 import { CATEGORIES } from "./store.js";
 import { parsePage, categorize, categoryLabel } from "./parser.js";
@@ -87,7 +88,7 @@ function renderGreeting() {
   const name = store.getState().profile.name;
   const element = $("#greeting");
   if (!name) {
-    element.textContent = "Federsee Terminplan";
+    element.textContent = ANWENDUNG.name;
     return;
   }
   // Grenzen wie vorgegeben, in Minuten gerechnet: bis 11:00 einschließlich
@@ -814,8 +815,18 @@ function shiftMonth(value, delta) {
 
 /* ------------------------------------------------------------------ Start */
 
+/** Traegt den Namen der Einrichtung dort ein, wo er im Text erscheint. */
+function setzeBezeichnungen() {
+  document.title = ANWENDUNG.name;
+  $("#brand-sub").textContent = ANWENDUNG.untertitel;
+  $$("[data-anwendung]").forEach((element) => { element.textContent = ANWENDUNG.name; });
+  const logo = $("#brand-logo");
+  if (logo) logo.alt = ANWENDUNG.anbieter.name;
+}
+
 store.load();
 bind();
+setzeBezeichnungen();
 render();
 ladeLogo();
 maybeWelcome();

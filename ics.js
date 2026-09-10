@@ -26,14 +26,14 @@ export function makeICS(days, { reminder = 15, calendarName = "Behandlungsplan" 
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const rows = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
-    "PRODID:-//Federsee Terminplan//DE", `X-WR-CALNAME:${escapeICS(calendarName)}`,
+    "PRODID:-//Behandlungsplan//DE", `X-WR-CALNAME:${escapeICS(calendarName)}`,
   ];
 
   for (const day of days) {
     for (const item of day.items) {
       if (!item.time || !item.title) continue;
       rows.push("BEGIN:VEVENT");
-      rows.push(`UID:${item.id}@federsee-terminplan`);
+      rows.push(`UID:${item.id}@behandlungsplan.local`);
       rows.push(`DTSTAMP:${stamp}`);
       rows.push(`DTSTART:${stampFor(day.date, item.time)}`);
       rows.push(`DTEND:${endStamp(day.date, item.time, item.duration)}`);

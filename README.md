@@ -103,6 +103,7 @@ Uhr „Guten Morgen“, bis 18:00 Uhr „Hallo“, danach „Guten Abend“.
 |---|---|
 | `store.js` | Datenhaltung und Speicherung auf dem Gerät |
 | `parser.js` | Aus erkanntem Text wird ein Tagesplan |
+| `konfiguration.js` | Name, Einrichtung und Anbieter – alles Einrichtungsspezifische |
 | `deskew.js` | Blatt im Foto finden und geradeziehen |
 | `pruefen.html` | Prüft nach dem Hochladen, ob alle Dateien angekommen sind |
 | `rechtliches.html` | Impressum und Datenschutzerklärung |
@@ -261,6 +262,23 @@ Texterkennung selbst als unsicher meldet.
 
 **Gespeichert wird nie ohne Prüfung.** Das Erkennungsergebnis landet zuerst in
 einer bearbeitbaren Liste. Erst „Speichern“ schreibt es in den Plan.
+
+## Anpassung an eine andere Einrichtung
+
+Alles, was von Haus zu Haus verschieden ist, steht in `konfiguration.js` –
+Name der Anwendung, Untertitel, Einrichtung, Anbieter. Für eine weitere Klinik
+genügt es, diese Datei zu ändern; am Programm selbst ist nichts zu tun.
+
+Drei Stellen außerhalb tragen den Namen ebenfalls, weil der Browser sie liest,
+bevor Programmcode läuft:
+
+- `manifest.webmanifest` – Name auf dem Startbildschirm
+- `rechtliches.html` – Seitentitel und Fußzeile
+- `pruefen.html` – Seitentitel
+
+Der Speicherschlüssel in `konfiguration.js` bleibt bewusst unverändert: Wird er
+umbenannt, sind die auf den Geräten bereits gespeicherten Pläne nicht mehr
+auffindbar.
 
 ## Farben und Logo anpassen
 

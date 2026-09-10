@@ -11,7 +11,9 @@
  * Browser.
  */
 
-const KEY = "federsee.plan.v3";
+import { ANWENDUNG } from "./konfiguration.js";
+
+const KEY = ANWENDUNG.speicherschluessel;
 const LEGACY_KEYS = ["federsee.plan.v2", "federsee.plan.v1", "federseePlan", "behandlungsplan"];
 
 /**
