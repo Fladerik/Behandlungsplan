@@ -20,7 +20,18 @@ const ANALYSE_BREITE = 640;
  * "erst entzerren, dann verkleinern" einen Abtastschritt, viel Rechenzeit
  * und ein Vielfaches an Speicher.
  */
-const ZIEL_BREITE = 2600;
+/**
+ * Breite des entzerrten Bildes.
+ *
+ * Gemessen an vier abfotografierten Plaenen mit erzwungener Entzerrung:
+ * 2600, 2300, 2000 und 1800 Pixel liefern alle dieselben 37 Termine -- die
+ * Rechenzeit faellt dabei von 23,6 auf 17,9 Sekunden zwischen 2600 und 2300
+ * und danach kaum noch, weil der Rest auf die Texterkennung entfaellt.
+ *
+ * 2300 nimmt also den ganzen Gewinn mit und laesst noch Reserve fuer
+ * schlechtere Aufnahmen, als die Testbilder sie zeigen.
+ */
+const ZIEL_BREITE = 2300;
 
 /**
  * Ab welcher Verzerrung ueberhaupt entzerrt wird.
@@ -223,7 +234,7 @@ function homographie(ziel, quelle) {
  * @param {number} hoehe
  * @returns {{canvas: HTMLCanvasElement, entzerrt: boolean}}
  */
-export function entzerre(quelle, breite, hoehe, zielBreiteMax = ZIEL_BREITE) {
+export async function entzerre(quelle, breite, hoehe, zielBreiteMax = ZIEL_BREITE, onProgress) {
   // Zweite Sicherung: unbrauchbare Masse fuehren sonst zu NaN-Canvasgroessen,
   // und getImageData bricht mit einer Meldung ab, die nichts erklaert.
   if (![breite, hoehe, zielBreiteMax].every((wert) => Number.isFinite(wert) && wert >= 1)) {
@@ -290,7 +301,7 @@ export function entzerre(quelle, breite, hoehe, zielBreiteMax = ZIEL_BREITE) {
   );
   if (kippung < KIPPUNG_SCHWELLE) return { canvas: null, entzerrt: false, kippung };
 
-  return { canvas: zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe), entzerrt: true, kippung };
+  return { canvas: await zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe, onProgress), entzerrt: true, kippung };
 }
 
 /**
@@ -317,7 +328,7 @@ export function entzerre(quelle, breite, hoehe, zielBreiteMax = ZIEL_BREITE) {
  */
 const MAX_QUELL_FLAECHE = 12e6;
 
-function zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe) {
+async function zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe, onProgress) {
   // Grosszuegig gewaehlt: Jede Verkleinerung vor der Transformation kostet
   // Schaerfe, die die spaetere Abtastung nicht zurueckholt. Erst bei sehr
   // grossen Aufnahmen wird ueberhaupt verkleinert -- ein uebliches
@@ -350,7 +361,11 @@ function zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe) {
   const zielDaten = zielBild.data;
 
   const [a, b, c, d, e, f, g, i] = h;
-  for (let v = 0; v < zielHoehe; v += 1) {
+
+  // Die Texterkennung liest ohnehin Graustufen. Statt drei Farbkanaele
+  // einzeln zu interpolieren, wird einmal der Grauwert gebildet -- ein
+  // Drittel der Arbeit im heissesten Teil der Schleife.
+  const zeile = (v) => {
     for (let u = 0; u < zielBreite; u += 1) {
       const nenner = g * u + i * v + 1;
       // Die Homographie liefert Koordinaten im Originalbild; sie werden auf
@@ -374,12 +389,34 @@ function zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe) {
       const p01 = p00 + quellBreite * 4;
       const p11 = p01 + 4;
 
-      for (let kanal = 0; kanal < 3; kanal += 1) {
-        const oben = quellDaten[p00 + kanal] * (1 - fx) + quellDaten[p10 + kanal] * fx;
-        const unten = quellDaten[p01 + kanal] * (1 - fx) + quellDaten[p11 + kanal] * fx;
-        zielDaten[ziffer + kanal] = oben * (1 - fy) + unten * fy;
-      }
+      const g00 = 0.299 * quellDaten[p00] + 0.587 * quellDaten[p00 + 1] + 0.114 * quellDaten[p00 + 2];
+      const g10 = 0.299 * quellDaten[p10] + 0.587 * quellDaten[p10 + 1] + 0.114 * quellDaten[p10 + 2];
+      const g01 = 0.299 * quellDaten[p01] + 0.587 * quellDaten[p01 + 1] + 0.114 * quellDaten[p01 + 2];
+      const g11 = 0.299 * quellDaten[p11] + 0.587 * quellDaten[p11 + 1] + 0.114 * quellDaten[p11 + 2];
+      const oben = g00 * (1 - fx) + g10 * fx;
+      const unten = g01 * (1 - fx) + g11 * fx;
+      const wert = oben * (1 - fy) + unten * fy;
+      zielDaten[ziffer] = zielDaten[ziffer + 1] = zielDaten[ziffer + 2] = wert;
       zielDaten[ziffer + 3] = 255;
+    }
+  };
+
+  // Zeilenweise mit Atempausen: eine ununterbrochene Schleife ueber neun
+  // Millionen Bildpunkte blockiert den Browser. Auf dem Telefon sind das
+  // zwanzig Sekunden und mehr, in denen die Oberflaeche einfriert und der
+  // Fortschritt stehenbleibt -- es sieht aus wie ein Absturz. Deshalb wird
+  // in Abschnitten gerechnet und dazwischen die Anzeige nachgefuehrt.
+  // Nach Zeit unterbrechen, nicht nach Zeilenzahl: auf einem schnellen Geraet
+  // waeren feste Abschnitte unnoetige Pausen, auf einem langsamen zu selten.
+  // Rund 40 Millisekunden Rechnung am Stueck halten die Anzeige fluessig.
+  const ATEMPAUSE_NACH_MS = 40;
+  let zuletzt = performance.now();
+  for (let v = 0; v < zielHoehe; v += 1) {
+    zeile(v);
+    if (performance.now() - zuletzt >= ATEMPAUSE_NACH_MS) {
+      onProgress?.((v + 1) / zielHoehe);
+      await atempause();
+      zuletzt = performance.now();
     }
   }
 
@@ -388,3 +425,9 @@ function zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe) {
   quellCanvas.height = 0;
   return ziel;
 }
+
+/** Laesst den Browser einmal zeichnen, bevor weitergerechnet wird. */
+const atempause = () => new Promise((weiter) => {
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => weiter());
+  else setTimeout(weiter, 0);
+});

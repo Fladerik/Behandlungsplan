@@ -244,7 +244,7 @@ export async function readFiles(files, onProgress) {
     } else {
       tasks.push({
         name: file.name,
-        async load() {
+        async load(onSchritt) {
           const image = await loadImage(file);
           // Zuerst das Blatt geradeziehen: eine schiefe Aufnahme laesst die
           // Tabellenspalten gegeneinander verrutschen, und daran scheitert
@@ -258,7 +258,7 @@ export async function readFiles(files, onProgress) {
           if (!Number.isFinite(breiteRoh) || !Number.isFinite(hoeheRoh) || breiteRoh < 1 || hoeheRoh < 1) {
             throw new Error(`Die Groesse von „${file.name}" liess sich nicht bestimmen. Bitte ein JPEG oder PNG waehlen.`);
           }
-          const gerade = entzerre(image, breiteRoh, hoeheRoh);
+          const gerade = await entzerre(image, breiteRoh, hoeheRoh, undefined, onSchritt);
           const quelle = gerade.canvas || image;
           const breite = gerade.canvas ? gerade.canvas.width : breiteRoh;
           const hoehe = gerade.canvas ? gerade.canvas.height : hoeheRoh;
@@ -281,7 +281,9 @@ export async function readFiles(files, onProgress) {
     const share = 1 / tasks.length;
 
     report(`Seite ${index + 1} von ${tasks.length} wird aufbereitet …`, base + share * 0.15);
-    const page = await task.load();
+    const page = await task.load((anteil) =>
+      report(`Seite ${index + 1} von ${tasks.length} wird geradegezogen … ${Math.round(anteil * 100)} %`,
+        base + share * (0.05 + 0.15 * anteil)));
     if (page.entzerrt) report(`Seite ${index + 1}: Blatt erkannt und geradegezogen.`, base + share * 0.25);
 
     if (page.kind === "text") {
