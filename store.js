@@ -72,9 +72,37 @@ function migrateLegacy(data) {
   return next;
 }
 
+/**
+ * Entfernt aus einem gespeicherten Woerterbuch alles, was nicht haette
+ * gelernt werden duerfen.
+ *
+ * Geraete, die schon im Betrieb waren, tragen die Folgen der alten Regel mit
+ * sich herum -- dort stehen Eintraege wie "Behandlung" (16 mal) oder
+ * "Saal Kanzach Abendessen Essensausgabe". Ohne diese Saeuberung bliebe die
+ * Abwaertsspirale auf genau den Geraeten bestehen, die sie am meisten
+ * getroffen hat.
+ */
+function saeubereLexikon(roh) {
+  const sauber = { title: {}, location: {}, practitioner: {} };
+  let entfernt = 0;
+  // Die Orte zuerst: die Titelpruefung braucht sie, um ein abgerissenes
+  // Stueck der Ortsspalte ("Kanzach") als solches zu erkennen.
+  for (const feld of ["location", "practitioner", "title"]) {
+    const ortsWoerter = ortsWoerterAus(sauber.location);
+    for (const [term, anzahl] of Object.entries(roh?.[feld] || {})) {
+      if (istLernwuerdig(feld, String(term).trim(), ortsWoerter)) sauber[feld][term] = anzahl;
+      else entfernt += 1;
+    }
+  }
+  if (entfernt) console.info(`Woerterbuch bereinigt: ${entfernt} unbrauchbare Eintraege entfernt.`);
+  return sauber;
+}
+
 export function load() {
   const stored = readRaw();
-  state = stored ? { ...emptyState(), ...stored, lexicon: { ...emptyState().lexicon, ...(stored.lexicon || {}) } } : emptyState();
+  state = stored
+    ? { ...emptyState(), ...stored, lexicon: saeubereLexikon(stored.lexicon) }
+    : emptyState();
   return state;
 }
 
@@ -227,7 +255,12 @@ export function putDay(iso, items, { mode = "replace", source = "Scan" } = {}) {
 
   if (mode === "merge" && existing) {
     const known = new Set(existing.items.map(fingerprint));
-    const merged = [...existing.items, ...incoming.filter((item) => !known.has(fingerprint(item)))];
+    const zusammen = [...existing.items, ...incoming.filter((item) => !known.has(fingerprint(item)))];
+    // Zwei Aufnahmen desselben Tages ergeben oft denselben Termin zweimal:
+    // einmal sauber gelesen, einmal nur als "Behandlung". Steht zur selben
+    // Uhrzeit bereits ein benannter Termin, faellt der Notnagel weg.
+    const benannt = new Set(zusammen.filter((item) => item.title && item.title !== "Behandlung").map((item) => item.time));
+    const merged = zusammen.filter((item) => !(item.title === "Behandlung" && benannt.has(item.time)));
     state.days[iso] = { ...existing, items: merged, importedAt: Date.now(), source };
   } else {
     state.days[iso] = { date: iso, items: incoming, importedAt: Date.now(), source };
@@ -325,9 +358,88 @@ export const oddCharacters = (value) => (String(value).match(/[^A-Za-zÄÖÜäö
  * Woerterbuch Verlesungsvarianten an und normalisiert spaeter womoeglich
  * auf die falsche davon. Die sauberere Schreibweise setzt sich durch.
  */
+/** Der Notnagel der Erkennung und reine Spaltennamen -- nie ein Begriff. */
+const NIE_LERNEN = /^(behandlung|termin|anwendung|heilmittel|behandler|haus|saal|ort|zeit|uhr)$/i;
+
+/** Woraus eine Ortsangabe auf diesen Plaenen beginnt. */
+const ORT_ANFANG = /^(saal|haus|has|eg|og|ug|\d[.,]?\s*[o0]g|raum|zimmer|therapeutikum|kurzentrum|treff|patientenzimmer|hallenbad|mtz|kg-|wartebereich|fernsehger|bewegungsbad|sporthalle|vortragsr)/i;
+
+/** Was in der Behandler-Spalte steht, ohne eine Person zu sein. */
+const BEHANDLER_WORT = /(essensausgab|videoschulung|selbst[st]?[äa]ndig)/i;
+
+/** Anrede vor einem Namen -- Umlaute in der Wortgrenze mitgedacht. */
+const ANREDE = /(^|[^\wÄÖÜäöüß])(frau|herr|dr|prof)\.?([^\wÄÖÜäöüß]|$)/i;
+
+/**
+ * Taugt dieser Wert als Woerterbucheintrag?
+ *
+ * Das Woerterbuch korrigiert kuenftige Scans. Ein falsch gelesener Wert darin
+ * richtet deshalb mehr Schaden an, als er Nutzen bringt: er wird zum Vorbild,
+ * an dem sich die naechste Erkennung ausrichtet, und jeder Scan faellt
+ * schlechter aus als der davor. Genau das war auf einem Geraet im Einsatz zu
+ * sehen -- dort stand "Behandlung" sechzehnmal als gelernter Anwendungsname.
+ *
+ * Gelernt wird darum nur, was wie ein sauber gelesener Begriff seines Feldes
+ * aussieht. Im Zweifel nicht lernen: der Grundbestand traegt auch allein.
+ */
+function istLernwuerdig(field, term, ortsWoerter = null) {
+  if (term.length < 3 || term.length > 44) return false;
+  if (NIE_LERNEN.test(term)) return false;
+  // Zeichen, die auf deutschen Klinikplaenen nicht vorkommen, sind ein
+  // sicheres Zeichen fuer eine Verlesung.
+  if (oddCharacters(term)) return false;
+  // Abgeschnitten: ein einzelner Grossbuchstabe am Ende, oder ein Satzzeichen.
+  if (/\s[A-ZÄÖÜ]$/.test(term) || /[:;,]$/.test(term)) return false;
+  // Grossbuchstabe mitten im Wort: zwei Zellen sind ineinandergelaufen
+  // ("HelparmÜben").
+  if (/[a-zäöüß][A-ZÄÖÜ]/.test(term)) return false;
+
+  const woerter = term.split(/\s+/);
+
+  if (field === "practitioner") {
+    // Eine Person traegt eine Anrede, sonst ist es ein Wort der Spalte selbst.
+    if (!ANREDE.test(term) && !BEHANDLER_WORT.test(term)) return false;
+    // "Ergo einzel Frau M. Hiller" ist Anwendung und Behandler in einem.
+    return woerter.length <= 3;
+  }
+
+  if (field === "location") {
+    // Orte sind laenger: "Therapeutikum, 2. OG Raum 2" sind fuenf Woerter.
+    if (woerter.length > 5) return false;
+    // Eine Anrede gehoert nie in eine Ortsangabe.
+    if (ANREDE.test(term)) return false;
+    // Deutsche Hauptwoerter beginnen gross. Ein kleingeschriebenes langes
+    // Wort ist eine Verlesung oder eine Nachbesserung von Hand
+    // ("Saal kranzach").
+    return !woerter.some((wort) => wort.length >= 4 && /^[a-zäöüß]/.test(wort));
+  }
+
+  // Anwendungen sind kurz und tragen weder Ort noch Person noch Ziffer vorn.
+  if (woerter.length > 4) return false;
+  if (/^\d/.test(term)) return false;
+  if (ORT_ANFANG.test(term)) return false;
+  if (ANREDE.test(term) || BEHANDLER_WORT.test(term)) return false;
+  // Ein einzelnes Wort, das schon als Teil einer Ortsangabe bekannt ist, ist
+  // ein abgerissenes Stueck der Ortsspalte ("Kanzach"), keine Anwendung.
+  if (woerter.length === 1 && (ortsWoerter ?? ortsWoerterAus(state.lexicon?.location)).has(fold(term))) return false;
+  return true;
+}
+
+/** Alle Einzelwoerter der bekannten Ortsangaben -- fuer die Titelpruefung. */
+function ortsWoerterAus(bucket) {
+  const menge = new Set();
+  for (const eintrag of Object.keys(bucket || {})) {
+    for (const teil of String(eintrag).split(/[\s,]+/)) {
+      const gefaltet = fold(teil);
+      if (gefaltet.length >= 3) menge.add(gefaltet);
+    }
+  }
+  return menge;
+}
+
 function countTerm(field, value) {
   const term = (value || "").trim();
-  if (term.length < 3) return;
+  if (!istLernwuerdig(field, term)) return;
   const bucket = (state.lexicon[field] ||= {});
   const key = fold(term);
   const known = Object.keys(bucket).find((entry) => fold(entry) === key);

@@ -593,7 +593,7 @@ function exportCalendar() {
 }
 
 function exportBackup() {
-  speichern(`terminplan-sicherung-${store.todayISO()}.json`, store.exportBackup(), "application/json")
+  speichern(`terminplan-sicherung-${store.todayISO()}.json`, store.exportBackup(), "application/json;charset=utf-8")
     .then((weg) => {
       if (weg === "abgebrochen") return;
       toast(weg === "geteilt" ? "Sicherung geteilt." : "Sicherung gespeichert (im Ordner „Downloads“).", 4500);
@@ -615,7 +615,7 @@ function exportDiagnose() {
     toast("Noch keine Erkennung gelaufen. Bitte zuerst einen Plan scannen.", 4200);
     return;
   }
-  speichern(`diagnose-${store.todayISO()}.json`, JSON.stringify(letzteDiagnose, null, 1), "application/json")
+  speichern(`diagnose-${store.todayISO()}.json`, JSON.stringify(letzteDiagnose, null, 1), "application/json;charset=utf-8")
     .then((weg) => {
       if (weg === "abgebrochen") return;
       toast(weg === "geteilt"

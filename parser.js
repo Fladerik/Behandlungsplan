@@ -121,7 +121,7 @@ const KNOWN_TREATMENTS = [
 const KNOWN_LOCATIONS = [
   "Therapeutikum", "Haus am Gsundbrunnen", "Haus am Park", "Kurzentrum",
   "Treff Sporthalle", "Sporthalle", "Patientenzimmer", "Hallenbad",
-  "Saal Kanzach", "Saal Kranzach", "Saal Bad Buchau", "Speisesaal", "Hauskapelle",
+  "Saal Kanzach", "Saal Bad Buchau", "Speisesaal", "Hauskapelle",
   "Bewegungsbad", "EG Bewegungsbad", "EG Fango", "EG Ergotherapie",
   "EG Physio Warteber.", "EG Vortragsr. Bussen", "Wartebereich Sporth.",
   "KG-Wartebereich", "MTZ Fitnessraum", "Fernsehgerät Pr. 33",
@@ -490,7 +490,10 @@ export function correct(value, field, lexicon = {}) {
   const anredeErgaenzt = text !== roh;
   const learned = Object.entries(lexicon[field] || {}).sort((a, b) => b[1] - a[1]).map(([term]) => term);
   const grundbestand = field === "title" ? KNOWN_TREATMENTS : field === "location" ? KNOWN_LOCATIONS : [];
-  const pool = [...learned, ...grundbestand];
+  // Der Grundbestand steht vorn: bei gleicher Genauigkeit gewinnt die
+  // gepruefte Schreibweise, nicht die auf diesem Geraet gelernte. Gelerntes
+  // setzt sich nur durch, wenn es naeher am Gelesenen liegt.
+  const pool = [...grundbestand, ...learned];
   const match = bestMatch(text, pool);
   if (!match) {
     const wortweise = korrigiereWortweise(text, grundbestand);
