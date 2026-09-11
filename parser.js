@@ -64,7 +64,23 @@ function tidyLocation(value) {
     .replace(/(\d)\s*\.?\s*[U][G]\b/gi, "$1. UG"));
 }
 
-const TITLE_PREFIX = /\b(dr|prof|frau|herr|hr|fr|dipl|med)\b\.?/i;
+/**
+ * Anreden und Titel vor einem Namen.
+ *
+ * Die Wortgrenze \b zaehlt Umlaute nicht als Buchstaben. "\bfr\b" trifft
+ * deshalb mitten in "Frühstück" -- und die Mahlzeit galt als Personenname.
+ * Die Grenzen sind hier darum ausgeschrieben und schliessen Umlaute ein.
+ */
+const TITLE_PREFIX = /(^|[^\wÄÖÜäöüß])(dr|prof|frau|herr|hr|fr|dipl|med)\.?([^\wÄÖÜäöüß]|$)/i;
+
+/**
+ * Woerter, die auf diesem Plan ausschliesslich in der Behandler-Spalte
+ * stehen. Sie sind nie der Name einer Anwendung -- landen aber leicht dort,
+ * wenn die Spalten auf einem gefalteten Blatt gegeneinander verrutschen.
+ */
+const PRACTITIONER_WORDS = [
+  "Essensausgabe", "Videoschulung", "Selbständiges Üben", "Selbstständiges Üben",
+];
 
 /** Anwendungen, die auf Reha-Plaenen im deutschsprachigen Raum ueblich sind. */
 const KNOWN_TREATMENTS = [
@@ -974,6 +990,52 @@ function splitIntoDays(lines, bezugstag) {
  * Greift bewusst nur, wenn sonst gar kein Titel zustande kaeme. Wo die
  * Spalten sauber erkannt wurden, aendert sich dadurch nichts.
  */
+/**
+ * Sucht die Anwendung im gesamten Text einer Terminzeile.
+ *
+ * Die Spaltenerkennung schliesst aus Pixelabstaenden. Auf einem gefalteten,
+ * schraeg fotografierten Blatt traegt das nicht: ein Knick wirft einen
+ * Schatten, die Zeile verrutscht, und Heilmittel landet im Ortsfeld oder
+ * umgekehrt.
+ *
+ * Die Begriffe auf diesem Plan stammen dagegen aus einer festen, kurzen
+ * Liste. Deshalb wird die Zeile zusaetzlich Wort fuer Wort danach abgesucht:
+ * jede zusammenhaengende Wortfolge wird mit den bekannten Anwendungen
+ * verglichen, die genaueste gewinnt. Das braucht keine Koordinaten und
+ * uebersteht auch einen verlesenen Buchstaben.
+ *
+ * @returns {{title: string, vorher: string, nachher: string}|null}
+ */
+function findeAnwendungImText(text, lexicon) {
+  const woerter = clean(text).split(/\s+/).filter(Boolean);
+  if (!woerter.length) return null;
+  const anwendungen = [...Object.keys(lexicon.title || {}), ...KNOWN_TREATMENTS];
+
+  let beste = null;
+  // Anwendungen dieses Plans sind hoechstens vier Woerter lang
+  // ("Krankengymnastik im Bewegungsbad", "Beruf und Sozialrecht").
+  for (let von = 0; von < woerter.length; von += 1) {
+    for (let laenge = Math.min(4, woerter.length - von); laenge >= 1; laenge -= 1) {
+      const stueck = woerter.slice(von, von + laenge).join(" ");
+      const treffer = bestMatch(stueck, anwendungen);
+      if (!treffer) continue;
+      // Genauigkeit zaehlt zuerst, danach der laengere Begriff: aus
+      // "Nordic Walking Info" soll nicht nur "Walking" werden.
+      if (!beste || treffer.distance < beste.distance
+        || (treffer.distance === beste.distance && laenge > beste.laenge)) {
+        beste = { distance: treffer.distance, laenge, von, titel: treffer.value };
+      }
+    }
+  }
+  if (!beste) return null;
+
+  return {
+    title: beste.titel,
+    vorher: clean(woerter.slice(0, beste.von).join(" ")).replace(/[,;:]+$/, ""),
+    nachher: clean(woerter.slice(beste.von + beste.laenge).join(" ")).replace(/^[,;:]+/, ""),
+  };
+}
+
 function holeAnwendungAusOrt(ort, lexicon) {
   const woerter = clean(ort).split(/\s+/);
   if (woerter.length < 2) return null;
@@ -1079,12 +1141,46 @@ function fromLines(lines, columns, lexicon) {
       if (extra.length) assigned.title = clean(haengeFortsetzungAn([assigned.title], extra, bekannt).join(" "));
     }
 
-    // Notfalls die Anwendung aus dem Ortsfeld herausloesen -- siehe dort.
-    if (!clean(assigned.title) && assigned.location) {
-      const gerettet = holeAnwendungAusOrt(assigned.location, lexicon);
-      if (gerettet) {
-        assigned.title = gerettet.title;
-        assigned.location = gerettet.location;
+    // Zuerst pruefen, ob der zugeordnete Titel ueberhaupt eine bekannte
+    // Anwendung ist. Sitzt die Spaltenzuordnung, ist er es -- dann bleibt
+    // alles, wie es ist. Sitzt sie nicht, entscheidet das Woerterbuch.
+    // Die Zeile so festhalten, wie sie zugeordnet wurde. Jede Reparatur
+    // sucht darin -- wer vorher etwas loescht, sucht hinterher vergeblich.
+    const rohZeile = [assigned.location, assigned.title, assigned.practitioner]
+      .map((wert) => clean(wert)).filter(Boolean).join(" ");
+
+    const anwendungen = [...Object.keys(lexicon.title || {}), ...KNOWN_TREATMENTS];
+    const istAnwendung = (wert) => Boolean(clean(wert) && bestMatch(wert, anwendungen));
+
+    // Eine Anrede oder ein reines Behandler-Wort im Titel heisst: die Spalten
+    // sind verrutscht. Bewusst eng geprueft -- "Helparm Üben" und "Info
+    // Ernährung" sehen wie zwei Namen aus und sind doch Anwendungen.
+    const titelIstBehandler = clean(assigned.title)
+      && !istAnwendung(assigned.title)
+      && (TITLE_PREFIX.test(assigned.title) || Boolean(bestMatch(assigned.title, PRACTITIONER_WORDS)));
+
+    if (titelIstBehandler) {
+      if (!clean(assigned.practitioner)) assigned.practitioner = assigned.title;
+      assigned.title = "";
+    }
+
+    if (!istAnwendung(assigned.title)) {
+      // Haeufigster Fall: die Anwendung klebt hinten am Ortsfeld.
+      if (!clean(assigned.title) && assigned.location) {
+        const gerettet = holeAnwendungAusOrt(assigned.location, lexicon);
+        if (gerettet) {
+          assigned.title = gerettet.title;
+          assigned.location = gerettet.location;
+        }
+      }
+      // Sonst die ganze Zeile durchsuchen, so wie sie urspruenglich dastand.
+      if (!istAnwendung(assigned.title)) {
+        const gefunden = findeAnwendungImText(rohZeile, lexicon);
+        if (gefunden) {
+          assigned.title = gefunden.title;
+          if (gefunden.vorher && !istAnwendung(assigned.location)) assigned.location = gefunden.vorher;
+          if (gefunden.nachher && !clean(assigned.practitioner)) assigned.practitioner = gefunden.nachher;
+        }
       }
     }
 
@@ -1141,4 +1237,4 @@ function fromPlainText(text, lexicon) {
   return items;
 }
 
-export { KNOWN_TREATMENTS, clean, holeAnwendungAusOrt };
+export { KNOWN_TREATMENTS, clean, holeAnwendungAusOrt, findeAnwendungImText };
