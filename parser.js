@@ -961,6 +961,47 @@ function splitIntoDays(lines, bezugstag) {
   return sections;
 }
 
+/**
+ * Holt die Anwendung aus einem Ortsfeld heraus, in dem beides zusammenklebt.
+ *
+ * Klebt auf dem Foto die Spalte "Behandlungsstelle" zu dicht an "Heilmittel",
+ * trennt die Texterkennung beide nicht -- dann steht im Ort
+ * "Wartebereich Sporth. Nordic Walking Info" und der Titel bleibt leer.
+ * Ein Abstandsmass hilft dagegen nicht zuverlaessig; am Foto gemessen
+ * schwanken die Spaltenabstaende zu stark. Das Woerterbuch hilft: der hintere
+ * Teil ist eine bekannte Anwendung, der vordere bleibt der Ort.
+ *
+ * Greift bewusst nur, wenn sonst gar kein Titel zustande kaeme. Wo die
+ * Spalten sauber erkannt wurden, aendert sich dadurch nichts.
+ */
+function holeAnwendungAusOrt(ort, lexicon) {
+  const woerter = clean(ort).split(/\s+/);
+  if (woerter.length < 2) return null;
+  const anwendungen = [...Object.keys(lexicon.title || {}), ...KNOWN_TREATMENTS];
+
+  // Steht dort in Wahrheit nur eine Anwendung, ist nichts abzutrennen.
+  if (bestMatch(woerter.join(" "), anwendungen)) return null;
+
+  let beste = null;
+  for (let schnitt = 1; schnitt < woerter.length; schnitt += 1) {
+    const hinten = woerter.slice(schnitt).join(" ");
+    const treffer = bestMatch(hinten, anwendungen);
+    if (!treffer) continue;
+    // Bei gleicher Genauigkeit gewinnt der laengere Begriff: aus
+    // "Nordic Walking Info" soll nicht nur "Info" werden.
+    const laenge = woerter.length - schnitt;
+    if (!beste || treffer.distance < beste.distance
+      || (treffer.distance === beste.distance && laenge > beste.laenge)) {
+      beste = { distance: treffer.distance, laenge, schnitt, titel: treffer.value };
+    }
+  }
+  if (!beste) return null;
+
+  const vorne = clean(woerter.slice(0, beste.schnitt).join(" ")).replace(/[,;:]+$/, "");
+  if (!vorne) return null;
+  return { title: beste.titel, location: vorne };
+}
+
 function fromLines(lines, columns, lexicon) {
   // Schritt 1: Rohzeilen sammeln und Folgezeilen anhaengen. Erst danach wird
   // korrigiert -- sonst wuerde "Krankengymnastik im" schon begradigt, bevor
@@ -1038,6 +1079,15 @@ function fromLines(lines, columns, lexicon) {
       if (extra.length) assigned.title = clean(haengeFortsetzungAn([assigned.title], extra, bekannt).join(" "));
     }
 
+    // Notfalls die Anwendung aus dem Ortsfeld herausloesen -- siehe dort.
+    if (!clean(assigned.title) && assigned.location) {
+      const gerettet = holeAnwendungAusOrt(assigned.location, lexicon);
+      if (gerettet) {
+        assigned.title = gerettet.title;
+        assigned.location = gerettet.location;
+      }
+    }
+
     const title = correct(assigned.title, "title", lexicon);
     const practitioner = correct(assigned.practitioner, "practitioner", lexicon);
     const location = correct(tidyLocation(assigned.location), "location", lexicon);
@@ -1091,4 +1141,4 @@ function fromPlainText(text, lexicon) {
   return items;
 }
 
-export { KNOWN_TREATMENTS, clean };
+export { KNOWN_TREATMENTS, clean, holeAnwendungAusOrt };
