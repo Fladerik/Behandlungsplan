@@ -10,14 +10,11 @@
 
 name: Als GitHub Pages veröffentlichen
 
+# Nur auf Zuruf. GitHub Pages verlangt fuer ein privates Repository einen
+# bezahlten Plan; solange der nicht besteht, wuerde jeder Lauf scheitern und
+# nur eine Fehlermeldung erzeugen. Sobald Pages eingeschaltet ist, kann hier
+# wieder auf "push" umgestellt werden.
 on:
-  push:
-    branches:
-      - main
-      - claude/**
-    paths-ignore:
-      - "README.md"
-      - "werkzeuge/**"
   workflow_dispatch:
 
 permissions:
