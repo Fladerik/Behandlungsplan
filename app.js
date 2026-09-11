@@ -492,10 +492,13 @@ function saveReview() {
   }
 
   let saved = 0;
+  const uebersprungen = [];
   for (const day of days) {
     const items = day.items.filter((item) => item.title && item.time);
     if (!items.length) continue;
-    store.putDay(day.date, items, { mode: day.mode, source: day.sources.join(", ") });
+    const ergebnis = store.putDay(day.date, items, { mode: day.mode, source: day.sources.join(", ") });
+    // Ein bereits vergangener Tag wird nicht angetastet -- siehe store.putDay.
+    if (ergebnis && ergebnis.uebersprungen) { uebersprungen.push(day.date); continue; }
     saved += items.length;
   }
   store.flush();
@@ -504,7 +507,12 @@ function saveReview() {
   ui.reviewWarnings = [];
   $("#review-dialog").close();
   render();
-  toast(saved ? `${saved} Termine an ${days.length} Tag(en) gespeichert.` : "Es wurde nichts gespeichert.");
+  if (uebersprungen.length) {
+    const tage = uebersprungen.join(", ");
+    toast(`${saved} Termine gespeichert. ${tage} liegt in der Vergangenheit und wurde nicht überschrieben.`, 6500);
+  } else {
+    toast(saved ? `${saved} Termine an ${days.length} Tag(en) gespeichert.` : "Es wurde nichts gespeichert.");
+  }
 }
 
 /* --------------------------------------------------- Termin bearbeiten */

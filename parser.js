@@ -104,6 +104,8 @@ const KNOWN_TREATMENTS = [
   "Begrüßungsvortrag", "Stressbewältigung", "Nordic Walking Info", "Info Ernährung",
   "Oase am Mittag", "Fahrgeld", "Visite", "Eigentraining Therme",
   "Beruf und Sozialrecht", "Beruf und Sozialberatung",
+  // Von den Plaenen der zweiten Woche uebernommen.
+  "Mobilisation", "Rückenschmerz", "ausf. Arztgespräch", "Rückenschmerzen",
   "Frühstück", "Mittagessen", "Abendessen", "Zwischenmahlzeit", "Anreise", "Abreise",
 ];
 
@@ -124,6 +126,7 @@ const KNOWN_LOCATIONS = [
   "EG Physio Warteber.", "EG Vortragsr. Bussen", "Wartebereich Sporth.",
   "KG-Wartebereich", "MTZ Fitnessraum", "Fernsehgerät Pr. 33",
   "Fitnessraum", "Ergotherapie", "Physiotherapie", "Fango",
+  "EG Raum 14", "Therapeutikum 4. OG", "EG Vortragsr. Bussen",
   "Raum", "Haus", "Saal", "Halle", "Bad", "Kabine", "Turnhalle",
   "Schulungsraum", "Gymnastikraum", "Empfang", "Service Center",
 ];
@@ -691,6 +694,24 @@ function isNoteLine(text) {
   return words.length >= 8 && /[.!?]$/.test(value) && /\b(sie|ihr|ihre|ihres|wir|ist|sind|wird|werden|erfolgt|findet|können|bitte)\b/i.test(value);
 }
 
+/**
+ * Ganze Saetze sind nie der Name einer Anwendung.
+ *
+ * Auf dem Foto rutscht ein Hinweistext ("... im Saal Kanzach ein. In der Zeit
+ * von 7 - 9 Uhr ...") gelegentlich in die Titelspalte, und der Termin hiess
+ * dann "Kanzach ein. In d". Geprueft wird nur bei Titeln, die ohnehin keiner
+ * bekannten Anwendung entsprechen -- "Mobi allg. BWB" und "Aquather. Sch."
+ * bleiben dadurch unberuehrt.
+ */
+function istProsa(text) {
+  const wert = clean(text);
+  if (!wert) return false;
+  if (wert.split(/\s+/).length > 5) return true;
+  // Punkt, Leerzeichen, Grossbuchstabe -- ein Satzende. Die Abkuerzungen
+  // dieses Plans schreiben ihre Punkte ohne Leerzeichen dahinter.
+  return /[.!?]\s+[A-ZÄÖÜ]/.test(wert);
+}
+
 const isColumnHeading = (text) => COLUMN_ROLES.some((entry) => entry.pattern.test(text.trim()));
 
 /** "Donnerstag 03. September 2026" -- eine Zeile, die nur einen Tag benennt. */
@@ -946,18 +967,30 @@ const FREMDES_DATUM = /(anreise|abreise|zuletzt gedruckt|gedruckt am|geburt|aufn
 function headerDate(lines, fullText, bezugstag) {
   // Auf den zusammengefuehrten Zeilen arbeiten: die kennen die raeumliche
   // Nachbarschaft und halten "Anreise: 02.09.2026" zusammen.
+  // Steht auf der Seite ueberhaupt ein Anreise-, Abreise- oder Druckdatum?
+  const stoerend = lines.some((line) => FREMDES_DATUM.test(line.text));
+
   const kandidaten = [];
   for (const line of lines) {
     const text = clean(line.text);
     if (FREMDES_DATUM.test(text)) continue;
     const datum = parseGermanDate(text, bezugstag);
-    if (datum) kandidaten.push({ datum, text });
+    if (datum) kandidaten.push({ datum, mitWochentag: WEEKDAY_PATTERN.test(text) });
   }
-  if (kandidaten.length) return kandidaten[0].datum;
 
-  // Keine unverdaechtige Zeile gefunden. Enthaelt die Seite ueberhaupt ein
-  // Anreise- oder Druckdatum, wird nicht geraten.
-  if (lines.some((line) => FREMDES_DATUM.test(line.text))) return "";
+  // Auf einem Foto reisst die Texterkennung "Anreise:" und "02.09.2026"
+  // regelmaessig in getrennte Zeilen -- das Datum steht dann scheinbar
+  // unverdaechtig da und landete bisher auf allen Terminen des Blattes.
+  //
+  // Ein Tagesdatum traegt auf diesen Plaenen immer seinen Wochentag
+  // ("Donnerstag 17. September 2026"); ein Anreisedatum nie. Sobald also ein
+  // fremdes Datum auf der Seite steht, zaehlt nur noch ein Datum mit
+  // Wochentag. Lieber kein Datum als das falsche: ein leeres Feld faellt in
+  // der Pruefung auf, ein falsches nicht.
+  const brauchbar = stoerend ? kandidaten.filter((eintrag) => eintrag.mitWochentag) : kandidaten;
+  if (brauchbar.length) return brauchbar[0].datum;
+
+  if (stoerend) return "";
   return parseGermanDate(fullText || "", bezugstag) || "";
 }
 
@@ -1151,6 +1184,12 @@ function fromLines(lines, columns, lexicon) {
 
     const anwendungen = [...Object.keys(lexicon.title || {}), ...KNOWN_TREATMENTS];
     const istAnwendung = (wert) => Boolean(clean(wert) && bestMatch(wert, anwendungen));
+
+    // Ein Hinweistext in der Titelspalte wird verworfen, bevor gesucht wird --
+    // sonst bliebe er als Terminname stehen.
+    if (clean(assigned.title) && !istAnwendung(assigned.title) && istProsa(assigned.title)) {
+      assigned.title = "";
+    }
 
     // Eine Anrede oder ein reines Behandler-Wort im Titel heisst: die Spalten
     // sind verrutscht. Bewusst eng geprueft -- "Helparm Üben" und "Info

@@ -217,6 +217,14 @@ export function putDay(iso, items, { mode = "replace", source = "Scan" } = {}) {
   const incoming = items.map(normalizeItem).filter((item) => item.title || item.time);
   const existing = state.days[iso];
 
+  // Ein vergangener Tag wird nie ueberschrieben. Was gewesen ist, kann sich
+  // nicht mehr aendern -- ein neuer Scan, der einen alten Tag anfasst, hat
+  // sich fast immer im Datum geirrt (auf diesen Plaenen typischerweise am
+  // Anreisedatum im Seitenkopf). Ihn stehen zu lassen schuetzt das Archiv.
+  if (iso < todayISO() && existing) {
+    return { ...existing, uebersprungen: true };
+  }
+
   if (mode === "merge" && existing) {
     const known = new Set(existing.items.map(fingerprint));
     const merged = [...existing.items, ...incoming.filter((item) => !known.has(fingerprint(item)))];

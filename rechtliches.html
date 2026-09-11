@@ -36,7 +36,9 @@
     .adressblock p { margin: 0; color: var(--ink); line-height: 1.6; }
     .adressblock a { color: var(--marke-700); font-weight: 600; }
     .zurueck { display: inline-block; margin: 8px 0 26px; color: var(--marke-700); font-weight: 600; }
-  </style>
+    .marken { display: flex; gap: 14px; align-items: center; margin: 0 0 18px; }
+  .marken img { width: 56px; height: 56px; border-radius: 12px; }
+</style>
 </head>
 <body>
 
@@ -52,6 +54,14 @@
 
   <section id="impressum">
     <h2>Impressum</h2>
+
+    <!-- Die Produktzeichen erscheinen nur, wenn die Dateien danebenliegen.
+         Fehlen sie, bleibt die Seite unveraendert -- so laesst sich ein Logo
+         jederzeit nachreichen, ohne am Code etwas zu aendern. -->
+    <p id="marken" class="marken" hidden>
+      <img id="marke-fugo" alt="FUGO Labs" hidden>
+      <img id="marke-tam2" alt="TaM² — Tag a Moment" hidden>
+    </p>
 
     <h3>Angaben gemäß § 5 DDG</h3>
     <div class="adressblock">
@@ -137,5 +147,19 @@
   <a class="zurueck" href="./">← Zurück zum Terminplan</a>
 </main>
 
+<script type="module">
+  // Wie in der App: vorhandene Logos einsetzen, fehlende stillschweigend
+  // auslassen. Ein fehlendes Bild darf das Impressum nicht entstellen.
+  for (const [id, datei] of [["#marke-fugo", "./logo.png"], ["#marke-tam2", "./logo-tam2.png"]]) {
+    const ziel = document.querySelector(id);
+    const pruefung = new Image();
+    pruefung.onload = () => {
+      ziel.src = datei;
+      ziel.hidden = false;
+      document.querySelector("#marken").hidden = false;
+    };
+    pruefung.src = datei;
+  }
+</script>
 </body>
 </html>
