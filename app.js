@@ -6,7 +6,7 @@
  * ist alles wieder da.
  */
 
-import { ANWENDUNG } from "./konfiguration.js";
+import { ANWENDUNG, FASSUNG } from "./konfiguration.js";
 import * as store from "./store.js";
 import { CATEGORIES } from "./store.js";
 import { parsePage, categorize, categoryLabel } from "./parser.js";
@@ -851,6 +851,10 @@ function shiftMonth(value, delta) {
 
 /** Traegt den Namen der Einrichtung dort ein, wo er im Text erscheint. */
 function setzeBezeichnungen() {
+  // Sichtbare Fassung: beantwortet die Frage "liegt das Update ueberhaupt
+  // auf dem Server?" ohne Raten.
+  const fassung = $("#fassung-note");
+  if (fassung) fassung.textContent = `Fassung ${FASSUNG}`;
   document.title = ANWENDUNG.name;
   $("#brand-sub").textContent = ANWENDUNG.untertitel;
   $$("[data-anwendung]").forEach((element) => { element.textContent = ANWENDUNG.name; });

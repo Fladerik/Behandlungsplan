@@ -13,6 +13,18 @@
  * Sie sind im README unter "Anpassung an eine andere Einrichtung" genannt.
  */
 
+/**
+ * Fassung dieser Auslieferung.
+ *
+ * Steht sichtbar im Menue und auf der Pruefseite. Ohne eine solche Marke
+ * laesst sich nicht unterscheiden, ob eine Aenderung wirklich auf dem Server
+ * liegt oder ob der Browser noch die alte Datei haelt -- eine Frage, die
+ * sonst jeden Fehlerbericht unbrauchbar macht.
+ *
+ * Beim Ausliefern hochzaehlen.
+ */
+export const FASSUNG = "2026-09-11 05:01";
+
 export const ANWENDUNG = {
   /** Name der Anwendung, wie er in der Kopfzeile und im Browsertab steht. */
   name: "Federsee Terminplan",
