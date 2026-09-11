@@ -1,0 +1,88 @@
+# Veröffentlicht die App als GitHub Pages.
+#
+# GitHub hostet die Seite selbst -- kein FTP, keine Zugangsdaten, nichts von
+# Hand hochzuladen. Das Repository bleibt privat, die Website ist öffentlich
+# erreichbar; genau diese Kombination braucht eine App, die Patienten per
+# QR-Code aufrufen, deren Quellcode aber dem Haus gehört.
+#
+# Einmalig einzustellen: Settings -> Pages -> Source: "GitHub Actions".
+# Dafür wird ein bezahlter Plan benötigt, solange das Repository privat ist.
+
+name: Als GitHub Pages veröffentlichen
+
+on:
+  push:
+    branches:
+      - main
+      - claude/**
+    paths-ignore:
+      - "README.md"
+      - "werkzeuge/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Läuft eine Veröffentlichung bereits, wird sie nicht abgebrochen -- eine
+# halb übertragene Seite wäre schlimmer als eine kurze Wartezeit.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  bauen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stand holen
+        uses: actions/checkout@v4
+
+      - name: Seite zusammenstellen
+        run: |
+          mkdir -p _seite
+          # Alles außer Werkzeugen, Abläufen und der Entwicklerdatei.
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'werkzeuge' \
+                   --exclude 'README.md' --exclude '_seite' ./ _seite/
+          # Ohne diese Datei überspringt GitHub Ordner, deren Name mit einem
+          # Unterstrich beginnt. Wir haben keine -- aber das kann sich ändern.
+          touch _seite/.nojekyll
+          echo "Übertragen werden:"
+          find _seite -type f | wc -l
+          du -sh _seite
+
+      - name: Vollständigkeit prüfen
+        run: |
+          # Fehlt die Texterkennung, startet die App beim Patienten nicht.
+          # Lieber hier abbrechen als eine kaputte Seite veröffentlichen.
+          for pflicht in index.html app.js parser.js ocr.js store.js styles.css \
+                         tessdata/deu.traineddata.gz vendor/tesseract.min.js \
+                         vendor/worker.min.js vendor/pdf.mjs; do
+            if [ ! -s "_seite/$pflicht" ]; then
+              echo "::error::$pflicht fehlt oder ist leer -- Veröffentlichung abgebrochen."
+              exit 1
+            fi
+          done
+          echo "Alle Pflichtdateien vorhanden."
+
+      - name: Pages vorbereiten
+        uses: actions/configure-pages@v5
+
+      - name: Seite hochladen
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _seite
+
+  veroeffentlichen:
+    needs: bauen
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - name: Veröffentlichen
+        id: pages
+        uses: actions/deploy-pages@v4
+
+      - name: Adresse ausgeben
+        run: echo "Die App ist erreichbar unter ${{ steps.pages.outputs.page_url }}"

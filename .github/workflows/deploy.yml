@@ -11,14 +11,11 @@
 
 name: Auf Webspace veröffentlichen
 
+# Wird nur noch von Hand ausgeloest. Solange die Zugangsdaten fehlen, waere
+# ein Lauf bei jedem Commit nur ein rotes Kreuz und eine E-Mail. Die
+# Veroeffentlichung laeuft ueber GitHub Pages (siehe pages.yml); dieser Weg
+# bleibt als Moeglichkeit erhalten, die App auf den eigenen Webspace zu legen.
 on:
-  push:
-    branches:
-      - claude/**
-    paths-ignore:
-      - "README.md"
-      - "werkzeuge/**"
-      - ".github/**"
   workflow_dispatch:
     inputs:
       ziel:
