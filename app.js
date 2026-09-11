@@ -325,6 +325,24 @@ async function handleFiles(files) {
     const pages = await readFiles(files, ({ label, ratio }) => setProgress(ratio, label));
     const lexicon = store.getLexicon();
 
+    // Rohergebnis der Texterkennung festhalten. Scheitert eine Erkennung beim
+    // Nutzer, laesst sich damit nachvollziehen, was sein Geraet tatsaechlich
+    // gelesen hat -- ohne dass er ein Foto herausgeben muss und ohne dass
+    // jemand raten muss. Nur im Arbeitsspeicher, nichts wird gespeichert.
+    letzteDiagnose = {
+      fassung: FASSUNG,
+      zeitpunkt: new Date().toISOString(),
+      geraet: navigator.userAgent,
+      bildschirm: `${screen.width}x${screen.height} @${devicePixelRatio}`,
+      seiten: pages.map((page) => ({
+        name: page.name,
+        entzerrt: Boolean(page.entzerrt),
+        textLaenge: (page.text || "").length,
+        text: (page.text || "").slice(0, 4000),
+        tsv: (page.tsv || "").split("\n").slice(0, 700).join("\n"),
+      })),
+    };
+
     // Eine Seite kann mehrere Tage enthalten, und ein Tag kann sich über zwei
     // Seiten ziehen. Deshalb wird nach Datum gebündelt, nicht nach Seite.
     const byDate = new Map();
@@ -571,6 +589,25 @@ function exportBackup() {
   toast("Sicherung gespeichert.");
 }
 
+/** Rohergebnis der letzten Erkennung -- siehe handleFiles. */
+let letzteDiagnose = null;
+
+/**
+ * Speichert das Rohergebnis der letzten Erkennung als Datei.
+ *
+ * Gedacht fuer den Fall, dass eine Erkennung beim Nutzer scheitert: die Datei
+ * zeigt, was die Texterkennung auf seinem Geraet gelesen hat. Damit laesst
+ * sich die Ursache bestimmen, statt sie zu vermuten.
+ */
+function exportDiagnose() {
+  if (!letzteDiagnose) {
+    toast("Noch keine Erkennung gelaufen. Bitte zuerst einen Plan scannen.", 4200);
+    return;
+  }
+  download(`diagnose-${store.todayISO()}.json`, JSON.stringify(letzteDiagnose, null, 1), "application/json");
+  toast("Diagnose gespeichert. Die Datei enthält den erkannten Text, kein Foto.", 5200);
+}
+
 async function importBackup(file) {
   try {
     const text = await file.text();
@@ -802,6 +839,7 @@ function bind() {
   $("#export-ics").addEventListener("click", exportCalendar);
   $("#export-backup").addEventListener("click", exportBackup);
   $("#import-backup").addEventListener("click", () => $("#backup-input").click());
+  $("#export-diagnose").addEventListener("click", exportDiagnose);
   $("#backup-input").addEventListener("change", (event) => event.target.files[0] && importBackup(event.target.files[0]));
   $("#clear-all").addEventListener("click", () => {
     if (!confirm("Wirklich alle Termine von diesem Gerät löschen?")) return;
