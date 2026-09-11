@@ -11,7 +11,7 @@ import * as store from "./store.js";
 import { CATEGORIES } from "./store.js";
 import { parsePage, categorize, categoryLabel } from "./parser.js";
 import { readFiles, releaseWorker } from "./ocr.js";
-import { makeICS, download } from "./ics.js";
+import { makeICS, download, speichern } from "./ics.js";
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
@@ -593,8 +593,11 @@ function exportCalendar() {
 }
 
 function exportBackup() {
-  download(`terminplan-sicherung-${store.todayISO()}.json`, store.exportBackup(), "application/json");
-  toast("Sicherung gespeichert.");
+  speichern(`terminplan-sicherung-${store.todayISO()}.json`, store.exportBackup(), "application/json")
+    .then((weg) => {
+      if (weg === "abgebrochen") return;
+      toast(weg === "geteilt" ? "Sicherung geteilt." : "Sicherung gespeichert (im Ordner „Downloads“).", 4500);
+    });
 }
 
 /** Rohergebnis der letzten Erkennung -- siehe handleFiles. */
@@ -612,8 +615,13 @@ function exportDiagnose() {
     toast("Noch keine Erkennung gelaufen. Bitte zuerst einen Plan scannen.", 4200);
     return;
   }
-  download(`diagnose-${store.todayISO()}.json`, JSON.stringify(letzteDiagnose, null, 1), "application/json");
-  toast("Diagnose gespeichert. Die Datei enthält den erkannten Text, kein Foto.", 5200);
+  speichern(`diagnose-${store.todayISO()}.json`, JSON.stringify(letzteDiagnose, null, 1), "application/json")
+    .then((weg) => {
+      if (weg === "abgebrochen") return;
+      toast(weg === "geteilt"
+        ? "Diagnose geteilt. Die Datei enthält den erkannten Text, kein Foto."
+        : "Diagnose gespeichert (im Ordner „Downloads“). Sie enthält den erkannten Text, kein Foto.", 6000);
+    });
 }
 
 async function importBackup(file) {

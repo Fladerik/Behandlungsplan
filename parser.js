@@ -121,7 +121,7 @@ const KNOWN_TREATMENTS = [
 const KNOWN_LOCATIONS = [
   "Therapeutikum", "Haus am Gsundbrunnen", "Haus am Park", "Kurzentrum",
   "Treff Sporthalle", "Sporthalle", "Patientenzimmer", "Hallenbad",
-  "Saal Kanzach", "Saal Bad Buchau", "Speisesaal", "Hauskapelle",
+  "Saal Kanzach", "Saal Kranzach", "Saal Bad Buchau", "Speisesaal", "Hauskapelle",
   "Bewegungsbad", "EG Bewegungsbad", "EG Fango", "EG Ergotherapie",
   "EG Physio Warteber.", "EG Vortragsr. Bussen", "Wartebereich Sporth.",
   "KG-Wartebereich", "MTZ Fitnessraum", "Fernsehgerät Pr. 33",

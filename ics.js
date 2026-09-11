@@ -53,6 +53,33 @@ export function makeICS(days, { reminder = 15, calendarName = "Behandlungsplan" 
   return `${rows.map(fold).join("\r\n")}\r\n`;
 }
 
+/**
+ * Datei sichern -- auf dem Telefon ueber das Teilen-Menue.
+ *
+ * Ein gewoehnlicher Download landet auf dem iPhone in "Dateien -> Downloads".
+ * Von dort muss der Nutzer sie erst wieder heraussuchen, um sie zu
+ * verschicken. Das Teilen-Menue ueberspringt diesen Umweg: die Datei geht
+ * direkt in Mail, Nachrichten oder wohin sonst.
+ *
+ * Kann das Geraet das nicht -- am Rechner ist das die Regel --, wird ganz
+ * normal heruntergeladen. Bricht der Nutzer das Teilen ab, geschieht
+ * ebenfalls nichts weiter; ein Abbruch ist kein Fehler.
+ */
+export async function speichern(filename, content, type = "application/json") {
+  const datei = new File([content], filename, { type });
+  if (navigator.canShare?.({ files: [datei] })) {
+    try {
+      await navigator.share({ files: [datei], title: filename });
+      return "geteilt";
+    } catch (fehler) {
+      if (fehler?.name === "AbortError") return "abgebrochen";
+      // Teilen ging schief -- dann eben herunterladen.
+    }
+  }
+  download(filename, content, type);
+  return "geladen";
+}
+
 export function download(filename, content, type = "text/calendar;charset=utf-8") {
   const blob = new Blob([content], { type });
   const link = document.createElement("a");
