@@ -249,10 +249,19 @@ export async function readFiles(files, onProgress) {
           // Zuerst das Blatt geradeziehen: eine schiefe Aufnahme laesst die
           // Tabellenspalten gegeneinander verrutschen, und daran scheitert
           // jede weitere Auswertung.
-          const gerade = entzerre(image, image.naturalWidth, image.naturalHeight);
+          // Ein Bild-Element meldet seine Groesse als naturalWidth, ein
+          // ImageBitmap -- der zweite Weg in loadImage -- nur als width.
+          // Wer das verwechselt, rechnet mit undefined weiter und bekommt
+          // spaeter "Value is not of type 'long'" aus getImageData.
+          const breiteRoh = image.naturalWidth || image.width;
+          const hoeheRoh = image.naturalHeight || image.height;
+          if (!Number.isFinite(breiteRoh) || !Number.isFinite(hoeheRoh) || breiteRoh < 1 || hoeheRoh < 1) {
+            throw new Error(`Die Groesse von „${file.name}" liess sich nicht bestimmen. Bitte ein JPEG oder PNG waehlen.`);
+          }
+          const gerade = entzerre(image, breiteRoh, hoeheRoh);
           const quelle = gerade.canvas || image;
-          const breite = gerade.canvas ? gerade.canvas.width : image.naturalWidth;
-          const hoehe = gerade.canvas ? gerade.canvas.height : image.naturalHeight;
+          const breite = gerade.canvas ? gerade.canvas.width : breiteRoh;
+          const hoehe = gerade.canvas ? gerade.canvas.height : hoeheRoh;
           // Ein entzerrtes Bild hat bereits die richtige Groesse; enhance
           // wuerde es sonst ein zweites Mal abtasten.
           const fertig = enhance(quelle, breite, hoehe, gerade.entzerrt);

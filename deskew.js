@@ -224,6 +224,11 @@ function homographie(ziel, quelle) {
  * @returns {{canvas: HTMLCanvasElement, entzerrt: boolean}}
  */
 export function entzerre(quelle, breite, hoehe, zielBreiteMax = ZIEL_BREITE) {
+  // Zweite Sicherung: unbrauchbare Masse fuehren sonst zu NaN-Canvasgroessen,
+  // und getImageData bricht mit einer Meldung ab, die nichts erklaert.
+  if (![breite, hoehe, zielBreiteMax].every((wert) => Number.isFinite(wert) && wert >= 1)) {
+    return { canvas: null, entzerrt: false };
+  }
   const skalierung = ANALYSE_BREITE / breite;
   const kleinBreite = Math.max(1, Math.round(breite * skalierung));
   const kleinHoehe = Math.max(1, Math.round(hoehe * skalierung));
