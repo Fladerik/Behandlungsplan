@@ -10,11 +10,17 @@
 
 name: Als GitHub Pages veröffentlichen
 
-# Nur auf Zuruf. GitHub Pages verlangt fuer ein privates Repository einen
-# bezahlten Plan; solange der nicht besteht, wuerde jeder Lauf scheitern und
-# nur eine Fehlermeldung erzeugen. Sobald Pages eingeschaltet ist, kann hier
-# wieder auf "push" umgestellt werden.
+# Laeuft bei jeder Aenderung am Entwicklungszweig. Voraussetzung ist, dass
+# unter Settings -> Pages als Quelle "GitHub Actions" eingestellt ist; bei
+# einem privaten Repository verlangt Pages zusaetzlich einen bezahlten Plan.
 on:
+  push:
+    branches:
+      - main
+      - claude/**
+    paths-ignore:
+      - "README.md"
+      - "werkzeuge/**"
   workflow_dispatch:
 
 permissions:
