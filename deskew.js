@@ -34,6 +34,15 @@ const ANALYSE_BREITE = 640;
 const ZIEL_BREITE = 2300;
 
 /**
+ * Laengste Zeit, die das Geradeziehen einer Seite verbrauchen darf.
+ *
+ * Am Rechner braucht es keine drei Sekunden, auf einem aelteren Telefon ein
+ * Vielfaches davon. Wird es dennoch ueberschritten, stimmt etwas nicht --
+ * dann wird ohne Entzerrung weitergelesen statt endlos zu rechnen.
+ */
+const ZEITBUDGET_MS = 25000;
+
+/**
  * Ab welcher Verzerrung ueberhaupt entzerrt wird.
  *
  * Die Umrechnung tastet das Bild neu ab und kostet dabei etwas Schaerfe --
@@ -301,7 +310,10 @@ export async function entzerre(quelle, breite, hoehe, zielBreiteMax = ZIEL_BREIT
   );
   if (kippung < KIPPUNG_SCHWELLE) return { canvas: null, entzerrt: false, kippung };
 
-  return { canvas: await zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe, onProgress), entzerrt: true, kippung };
+  const canvas = await zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe, onProgress);
+  // Abgebrochen: ohne Entzerrung weitermachen, nicht ohne Ergebnis.
+  if (!canvas) return { canvas: null, entzerrt: false, kippung, abgebrochen: true };
+  return { canvas, entzerrt: true, kippung };
 }
 
 /**
@@ -410,10 +422,16 @@ async function zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe, 
   // waeren feste Abschnitte unnoetige Pausen, auf einem langsamen zu selten.
   // Rund 40 Millisekunden Rechnung am Stueck halten die Anzeige fluessig.
   const ATEMPAUSE_NACH_MS = 40;
-  let zuletzt = performance.now();
+  const beginn = performance.now();
+  let zuletzt = beginn;
   for (let v = 0; v < zielHoehe; v += 1) {
     zeile(v);
     if (performance.now() - zuletzt >= ATEMPAUSE_NACH_MS) {
+      // Notbremse: dauert das Geradeziehen laenger als das Zeitbudget, wird
+      // es abgebrochen. Ein schiefes Blatt wird dann schlechter gelesen --
+      // aber gelesen. Ein Scan, der nie endet, ist immer das schlechtere
+      // Ergebnis.
+      if (performance.now() - beginn > ZEITBUDGET_MS) return null;
       onProgress?.((v + 1) / zielHoehe);
       await atempause();
       zuletzt = performance.now();
@@ -426,8 +444,21 @@ async function zeichneEntzerrt(quelle, breite, hoehe, h, zielBreite, zielHoehe, 
   return ziel;
 }
 
-/** Laesst den Browser einmal zeichnen, bevor weitergerechnet wird. */
-const atempause = () => new Promise((weiter) => {
-  if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => weiter());
-  else setTimeout(weiter, 0);
-});
+/**
+ * Laesst den Browser einmal zeichnen, bevor weitergerechnet wird.
+ *
+ * Bewusst NICHT ueber requestAnimationFrame: das haelt an, sobald der
+ * Bildschirm sperrt oder der Nutzer die App wechselt -- die Rechnung liefe
+ * dann nie weiter, und der Scan bliebe fuer immer stehen. Genau das ist
+ * einem Nutzer passiert.
+ *
+ * Ein Kanal-Ereignis wird dagegen auch im Hintergrund zugestellt und nicht
+ * wie setTimeout auf eine Sekunde gebremst.
+ */
+const atempause = (() => {
+  if (typeof MessageChannel !== "function") return () => new Promise((weiter) => setTimeout(weiter, 0));
+  const kanal = new MessageChannel();
+  const wartende = [];
+  kanal.port1.onmessage = () => wartende.shift()?.();
+  return () => new Promise((weiter) => { wartende.push(weiter); kanal.port2.postMessage(0); });
+})();
