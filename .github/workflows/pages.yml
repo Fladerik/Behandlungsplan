@@ -68,14 +68,13 @@ jobs:
           done
           echo "Alle Pflichtdateien vorhanden."
 
+      # Pages selbst einzuschalten ist versucht worden und geht nicht: der
+      # Ablauf darf das nicht ("Resource not accessible by integration"),
+      # GitHub behaelt es dem Kontoinhaber vor. Einmalig einzustellen unter
+      # Settings -> Pages, Quelle "GitHub Actions". Fehlt das, meldet dieser
+      # Schritt "Get Pages site failed".
       - name: Pages vorbereiten
         uses: actions/configure-pages@v5
-        with:
-          # Schaltet Pages beim ersten Lauf selbst ein. Ohne dies muesste es
-          # jemand von Hand unter Settings -> Pages als Quelle "GitHub
-          # Actions" einstellen -- ein Klick, der leicht uebersehen wird und
-          # dessen Fehlen nur als "Get Pages site failed" sichtbar ist.
-          enablement: true
 
       - name: Seite hochladen
         uses: actions/upload-pages-artifact@v3
