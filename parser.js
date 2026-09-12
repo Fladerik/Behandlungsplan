@@ -717,15 +717,54 @@ function istProsa(text) {
 
 const isColumnHeading = (text) => COLUMN_ROLES.some((entry) => entry.pattern.test(text.trim()));
 
-/** "Donnerstag 03. September 2026" -- eine Zeile, die nur einen Tag benennt. */
-function dayHeadingDate(line, bezugstag) {
+/** "Donnerstag 03. September 2026" -- Wochentag, Tag und Monat am Stueck. */
+const TAGESKOPF = new RegExp(
+  `(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonnabend|sonntag)`
+  + `[\\s.,]+\\d{1,2}\\.?\\s+(?:${MONTH_NAMES})\\.?(?:\\s+\\d{4})?`, "i");
+
+/**
+ * Findet die Datumszeile eines Tages -- auch wenn Nachbartext daran klebt.
+ *
+ * Frueher wurde die ganze Zeile geprueft und verworfen, sobald sie eine
+ * Uhrzeit enthielt oder laenger als 46 Zeichen war. Auf einem eng gedruckten,
+ * abfotografierten Plan verschmilzt die Ueberschrift aber regelmaessig mit
+ * der ersten Terminzeile darunter ("Samstag 19. September 2026 07:00 Saal
+ * Kanzach Frühstück"). Dann trafen beide Regeln zu, die Ueberschrift wurde
+ * verworfen -- und der zweite Tag einer Seite fehlte vollstaendig.
+ *
+ * Gesucht wird deshalb nur noch die Wortfolge selbst. Was dahinter steht,
+ * wird nicht mehr zum Ausschluss benutzt, sondern zurueckgegeben: beginnt es
+ * mit einer Uhrzeit, ist es ein Termin und bleibt erhalten.
+ *
+ * @returns {{date: string, rest: object|null}|null}
+ */
+function tagesKopf(line, bezugstag) {
   const text = clean(line.text);
-  if (!WEEKDAY_PATTERN.test(text)) return "";
-  if (/\d{1,2}\s*[:.]\s*\d{2}/.test(text)) return "";   // enthaelt eine Uhrzeit -> Hinweis
-  if (text.length > 46) return "";
-  const date = parseGermanDate(text, bezugstag);
-  if (!date) return "";
-  return dateMatchesWeekday(date, text) === false ? "" : date;
+  const treffer = text.match(TAGESKOPF);
+  if (!treffer) return null;
+
+  const kopf = treffer[0];
+  const date = parseGermanDate(kopf, bezugstag);
+  if (!date) return null;
+  if (dateMatchesWeekday(date, kopf) === false) return null;
+
+  // Eine mitgelesene Terminzeile faengt mit ihrer Uhrzeit an. Alles ab dort
+  // wird als eigene Zeile weitergereicht, statt mit der Ueberschrift zu
+  // verschwinden.
+  const woerter = line.words || [];
+  const abZeit = woerter.findIndex((wort) => /^\d{1,2}\s*[:.]\s*\d{2}$/.test(clean(wort.text)));
+  const rest = abZeit > 0 ? woerter.slice(abZeit) : [];
+  if (!rest.length) return { date, rest: null };
+
+  return {
+    date,
+    rest: {
+      ...line,
+      words: rest,
+      text: rest.map((wort) => wort.text).join(" "),
+      left: rest[0].left,
+    },
+  };
 }
 
 /* --------------------------------------------- Spalten aus der Ueberschrift */
@@ -1002,10 +1041,12 @@ function splitIntoDays(lines, bezugstag) {
   const sections = [];
   let current = null;
   for (const line of lines) {
-    const date = dayHeadingDate(line, bezugstag);
-    if (date) {
-      current = { date, lines: [] };
+    const kopf = tagesKopf(line, bezugstag);
+    if (kopf) {
+      current = { date: kopf.date, lines: [] };
       sections.push(current);
+      // Klebte ein Termin an der Ueberschrift, gehoert er zu diesem Tag.
+      if (kopf.rest) current.lines.push(kopf.rest);
       continue;
     }
     if (current) current.lines.push(line);
