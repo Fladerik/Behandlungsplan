@@ -407,6 +407,18 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
 .hint strong { color: var(--ink); }
 .hint a { color: var(--marke-700); font-weight: 600; }
 .hint a.tam { color: var(--tam-orange); }
+
+/* QR-Code zur App. Fest eingebettet statt zur Laufzeit erzeugt: die Adresse
+   aendert sich nie, also braucht es dafuer keine Bibliothek -- und der Code
+   steht auch ohne Netz zur Verfuegung. */
+.qr-block { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.qr-bild {
+  width: 190px; height: 190px; padding: 12px;
+  background: #fff; border: 1px solid var(--line); border-radius: 14px;
+}
+.qr-bild svg { display: block; }
+.qr-adresse { margin: 0; font-size: 13px; text-align: center; word-break: break-all; }
+.qr-adresse a { color: var(--marke-700); }
 /* Die beiden Produktzeichen erscheinen nur, wenn die Dateien vorliegen. */
 .produkte a { display: inline-flex; align-items: center; gap: 8px; line-height: 1.9; }
 .produkt-logo { width: 22px; height: 22px; border-radius: 5px; flex: none; }
