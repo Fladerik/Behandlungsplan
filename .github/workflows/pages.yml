@@ -24,9 +24,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  # Geschrieben wird der Zweig gh-pages -- mehr wird nicht gebraucht.
+  contents: write
 
 # Läuft eine Veröffentlichung bereits, wird sie nicht abgebrochen -- eine
 # halb übertragene Seite wäre schlimmer als eine kurze Wartezeit.
@@ -68,29 +67,22 @@ jobs:
           done
           echo "Alle Pflichtdateien vorhanden."
 
-      # Pages selbst einzuschalten ist versucht worden und geht nicht: der
-      # Ablauf darf das nicht ("Resource not accessible by integration"),
-      # GitHub behaelt es dem Kontoinhaber vor. Einmalig einzustellen unter
-      # Settings -> Pages, Quelle "GitHub Actions". Fehlt das, meldet dieser
-      # Schritt "Get Pages site failed".
-      - name: Pages vorbereiten
-        uses: actions/configure-pages@v5
-
-      - name: Seite hochladen
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _seite
-
-  veroeffentlichen:
-    needs: bauen
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.pages.outputs.page_url }}
-    steps:
-      - name: Veröffentlichen
-        id: pages
-        uses: actions/deploy-pages@v4
-
-      - name: Adresse ausgeben
-        run: echo "Die App ist erreichbar unter ${{ steps.pages.outputs.page_url }}"
+      - name: Auf den Zweig gh-pages schieben
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Veroeffentlicht wird ueber den klassischen Zweig gh-pages, nicht
+          # ueber die Pages-API. Grund: die API verlangt, dass unter
+          # Settings -> Pages die Quelle "GitHub Actions" eingestellt ist --
+          # ein Klick, an dem die Einrichtung mehrfach gescheitert ist, weil
+          # der Ablauf ihn nicht selbst setzen darf. Ueber den Zweig kommt
+          # die Veroeffentlichung ganz ohne Einstellung aus.
+          cd _seite
+          git init -q
+          git checkout -q -b gh-pages
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Stand ${GITHUB_SHA:0:7}"
+          git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          echo "Veroeffentlicht unter https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
