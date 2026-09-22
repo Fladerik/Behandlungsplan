@@ -23,7 +23,7 @@
  *
  * Beim Ausliefern hochzaehlen.
  */
-export const FASSUNG = "2026-09-15 08:54";
+export const FASSUNG = "2026-09-22 20:24";
 
 export const ANWENDUNG = {
   /** Name der Anwendung, wie er in der Kopfzeile und im Browsertab steht. */

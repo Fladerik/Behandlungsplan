@@ -966,7 +966,27 @@ export function parsePage(tsv, fullText, { lexicon = {}, bezugstag = new Date() 
   for (const section of sections) {
     const result = fromLines(section.lines, columns, lexicon);
     skipped += result.skipped;
-    if (result.items.length) days.push({ date: section.date, items: result.items });
+    if (result.items.length) days.push({ date: section.date, items: result.items, vorlauf: section.vorlauf });
+  }
+
+  // Termine oberhalb der ersten Datumszeile: das Datum stand auf dem Blatt,
+  // ist aber nicht lesbar geworden. Auf diesen Plaenen folgen die Tage
+  // lueckenlos aufeinander, der Abschnitt ist also der Vortag des ersten
+  // datierten Abschnitts. Eingesetzt wird er als Vorschlag -- sichtbar im
+  // Datumsfeld der Pruefung und dort mit einem Griff zu aendern. Lieber ein
+  // benannter Vorschlag zum Pruefen als fuenf lautlos verlorene Termine.
+  const vorlaufTag = days.find((day) => day.vorlauf);
+  if (vorlaufTag) {
+    delete vorlaufTag.vorlauf;
+    const folgend = days.find((day) => day.date);
+    const geraten = folgend ? vortag(folgend.date) : "";
+    const anzahl = vorlaufTag.items.length;
+    if (geraten) {
+      vorlaufTag.date = geraten;
+      warnings.push(`Über der Datumszeile vom ${tagText(folgend.date)} stehen ${anzahl} Termine ohne eigene Datumszeile – beim Fotografieren war sie offenbar abgeschnitten oder unlesbar. Eingesetzt ist der Vortag (${tagText(geraten)}); bitte das Datum oben prüfen.`);
+    } else {
+      warnings.push(`${anzahl} Termine stehen über der ersten Datumszeile, zu der kein Datum lesbar war. Bitte das Datum oben eintragen.`);
+    }
   }
 
   if (!days.length) warnings.push("Es wurden keine Uhrzeiten erkannt. Termine können unten von Hand ergänzt werden.");
@@ -1036,9 +1056,22 @@ function headerDate(lines, fullText, bezugstag) {
   return parseGermanDate(fullText || "", bezugstag) || "";
 }
 
-/** Zerlegt die Seite an den Datumszeilen in Tagesabschnitte. */
+/**
+ * Zerlegt die Seite an den Datumszeilen in Tagesabschnitte.
+ *
+ * Zeilen VOR der ersten Datumszeile gingen hier bisher verloren. Auf einem
+ * Handyfoto ist das der haeufigste Fall von allen: der obere Blattrand ist
+ * angeschnitten, verschattet oder stark verzerrt, die Datumszeile des ersten
+ * Tages ist damit unlesbar -- und mit ihr verschwanden lautlos alle Termine
+ * dieses Tages. Der erste ist auf dieser Vorlage immer das Fruehstueck.
+ *
+ * Sie kommen jetzt als eigener Abschnitt ohne Datum zurueck ("Vorlauf").
+ * Welches Datum er bekommt, entscheidet parsePage -- dort ist der folgende
+ * Tag bekannt.
+ */
 function splitIntoDays(lines, bezugstag) {
   const sections = [];
+  const vorlauf = [];
   let current = null;
   for (const line of lines) {
     const kopf = tagesKopf(line, bezugstag);
@@ -1050,8 +1083,28 @@ function splitIntoDays(lines, bezugstag) {
       continue;
     }
     if (current) current.lines.push(line);
+    else vorlauf.push(line);
   }
+  // Ohne jede Datumszeile bleibt alles beim Alten: parsePage nimmt dann die
+  // ganze Seite als einen Tag mit dem Datum aus dem Seitenkopf.
+  if (sections.length && vorlauf.length) sections.unshift({ date: "", lines: vorlauf, vorlauf: true });
   return sections;
+}
+
+/** Der Tag davor, als ISO-Datum. */
+function vortag(isoDate) {
+  const zeit = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(zeit.getTime())) return "";
+  zeit.setDate(zeit.getDate() - 1);
+  return `${zeit.getFullYear()}-${String(zeit.getMonth() + 1).padStart(2, "0")}-${String(zeit.getDate()).padStart(2, "0")}`;
+}
+
+const TAG_LANG = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long" });
+
+/** "Dienstag, 15. September" -- fuer Hinweistexte. */
+function tagText(isoDate) {
+  const zeit = new Date(`${isoDate}T12:00:00`);
+  return Number.isNaN(zeit.getTime()) ? isoDate : TAG_LANG.format(zeit);
 }
 
 /**
@@ -1141,6 +1194,39 @@ function holeAnwendungAusOrt(ort, lexicon) {
   return { title: beste.titel, location: vorne };
 }
 
+/**
+ * Findet den Anfang einer Tabellenzeile, wenn links vor der Uhrzeit noch
+ * fremder Text klebt.
+ *
+ * extractTime sieht nur das erste Wort einer Zeile. Liegt das Blatt beim
+ * Fotografieren leicht gedreht, rutscht ein Wort der Nachbarzeile in die
+ * Terminzeile und steht dann VOR der Uhrzeit -- der Termin war damit
+ * verloren, er galt als "Zeile ohne Uhrzeit". Getroffen hat es zuerst den
+ * ersten Termin des Tages, weil darueber die Datumszeile oder ein
+ * Hinweissatz steht.
+ *
+ * Eine Uhrzeit in der Zeitspalte ist immer der Beginn einer Tabellenzeile.
+ * Was links davon steht, gehoert nicht dazu und wird abgeschnitten. Die
+ * Bindung an die Zeitspalte ist wesentlich: "von 7 - 9 Uhr" mitten im Satz
+ * liegt weit rechts davon und bleibt unberuehrt.
+ */
+function abZeitspalte(line, columns) {
+  if (!columns) return null;
+  // Grenze ist der Beginn der zweiten Spalte, nicht das Ende der Ueberschrift
+  // "Zeit": das vorgeschobene Wort verschiebt die Uhrzeit ja selbst nach
+  // rechts. Die Toleranz von 24 ist dieselbe wie in columnIndexAt.
+  const naechsteSpalte = columns.anchors[1] ? columns.anchors[1].left - 24 : Infinity;
+  const woerter = line.words || [];
+  for (let index = 1; index < woerter.length; index += 1) {
+    const wort = woerter[index];
+    if (wort.left >= naechsteSpalte) return null;
+    if (!normalizeTime(clean(wort.text))) continue;
+    const rest = woerter.slice(index);
+    return { ...line, words: rest, text: rest.map((teil) => teil.text).join(" "), left: rest[0].left };
+  }
+  return null;
+}
+
 function fromLines(lines, columns, lexicon) {
   // Schritt 1: Rohzeilen sammeln und Folgezeilen anhaengen. Erst danach wird
   // korrigiert -- sonst wuerde "Krankengymnastik im" schon begradigt, bevor
@@ -1150,12 +1236,21 @@ function fromLines(lines, columns, lexicon) {
   let skipped = 0;
   const bekannt = wortbestand(lexicon);
 
-  for (const line of lines) {
+  for (let line of lines) {
     const text = clean(line.text);
     if (isChrome(text) || isNoteLine(text) || (columns && line.top < columns.top - 4)) { previous = null; continue; }
     if (isColumnHeading(text) && !extractTime(line.words)) { previous = null; continue; }
 
-    const stamp = extractTime(line.words);
+    let stamp = extractTime(line.words);
+    if (!stamp) {
+      // Steht die Uhrzeit nicht am Anfang, aber in der Zeitspalte, beginnt die
+      // Tabellenzeile eben dort; der Text davor gehoert der Nachbarzeile.
+      const versetzt = abZeitspalte(line, columns);
+      if (versetzt) {
+        const erneut = extractTime(versetzt.words);
+        if (erneut) { line = versetzt; stamp = erneut; }
+      }
+    }
 
     if (!stamp) {
       // Zeile ohne Uhrzeit: entweder der Umbruch einer Tabellenzelle oder eine
