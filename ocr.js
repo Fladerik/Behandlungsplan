@@ -90,27 +90,139 @@ function enhance(source, width, height, bereitsSkaliert = false) {
 
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
   const data = pixels.data;
-  const histogram = new Uint32Array(256);
+  const histogramm = new Uint32Array(256);
   for (let i = 0; i < data.length; i += 4) {
-    const gray = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) | 0;
-    data[i] = data[i + 1] = data[i + 2] = gray;
-    histogram[gray] += 1;
+    const grau = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) | 0;
+    data[i] = data[i + 1] = data[i + 2] = grau;
+    histogramm[grau] += 1;
   }
-  // Kontrast an den tatsächlichen Grauwerten des Blattes ausrichten (2 %/98 %).
-  const total = canvas.width * canvas.height;
-  let low = 0;
-  let high = 255;
-  let seen = 0;
-  for (let value = 0; value < 256; value += 1) { seen += histogram[value]; if (seen > total * 0.02) { low = value; break; } }
-  seen = 0;
-  for (let value = 255; value >= 0; value -= 1) { seen += histogram[value]; if (seen > total * 0.02) { high = value; break; } }
-  const span = Math.max(24, high - low);
-  for (let i = 0; i < data.length; i += 4) {
-    const stretched = Math.min(255, Math.max(0, ((data[i] - low) / span) * 255));
-    data[i] = data[i + 1] = data[i + 2] = stretched;
+  if (!gleicheLichtAus(data, canvas.width, canvas.height)) {
+    spreizeKontrast(data, canvas.width * canvas.height, histogramm);
   }
   context.putImageData(pixels, 0, 0);
   return canvas;
+}
+
+/**
+ * Kontrast ueber das ganze Bild spreizen (2 %/98 %).
+ *
+ * Der bisherige Weg, jetzt nur noch Rueckfallebene: Er taugt fuer gleichmaessig
+ * belichtete Vorlagen -- eine PDF-Seite, ein Scan -- und fuer alles, was gar
+ * nicht nach Papier aussieht. Bei ungleichem Licht richtet er nichts aus,
+ * weil er mit einem einzigen Massstab fuer die ganze Seite rechnet.
+ */
+function spreizeKontrast(data, gesamt, histogramm) {
+  let unten = 0;
+  let oben = 255;
+  let gezaehlt = 0;
+  for (let wert = 0; wert < 256; wert += 1) { gezaehlt += histogramm[wert]; if (gezaehlt > gesamt * 0.02) { unten = wert; break; } }
+  gezaehlt = 0;
+  for (let wert = 255; wert >= 0; wert -= 1) { gezaehlt += histogramm[wert]; if (gezaehlt > gesamt * 0.02) { oben = wert; break; } }
+  const spanne = Math.max(24, oben - unten);
+  for (let i = 0; i < data.length; i += 4) {
+    const gestreckt = Math.min(255, Math.max(0, ((data[i] - unten) / spanne) * 255));
+    data[i] = data[i + 1] = data[i + 2] = gestreckt;
+  }
+}
+
+/**
+ * Schatten ausgleichen -- der groesste Hebel bei gefalteten Blaettern.
+ *
+ * Ein gefalteter Zettel wirft entlang der Bruchkante ein Schattenband. Darin
+ * ist die Schrift nicht unscharf, sondern nur dunkler: das Papier hat dort
+ * vielleicht den Grauwert 120 statt 250, die Schrift 60 statt 20. Der
+ * Abstand zwischen beidem schrumpft, und die Texterkennung liest die Zeile
+ * gar nicht mehr oder nur als Umriss -- ganze Terminzeilen fielen so aus.
+ *
+ * Eine Kontrastspreizung ueber das ganze Bild hilft dagegen nicht. Sie
+ * rechnet mit EINEM Hell- und EINEM Dunkelwert fuer die gesamte Seite; das
+ * helle Papier neben der Falte haelt den Hellwert oben, und im Schatten
+ * bleibt alles, wie es war. Gebraucht wird ein Massstab, der sich von Ort
+ * zu Ort mitbewegt.
+ *
+ * Genau das geschieht hier: Fuer jeden Bildpunkt wird der oertliche
+ * Papierton geschaetzt und der Punkt daran gemessen. Wo das Papier dunkel
+ * ist, wird kraeftiger aufgehellt als daneben. Die Schaetzung laeuft auf
+ * einem auf ein Achtel verkleinerten Bild -- ein Schattenverlauf ist
+ * grobkoernig, und die Rechnung kostet so nur ein Sechzigstel; der volle
+ * Weg braeuchte fuer ein Integralbild ueber sieben Millionen Punkte
+ * dreissig Megabyte allein an Zwischenspeicher.
+ */
+function gleicheLichtAus(data, breite, hoehe) {
+  const TEILER = 8;
+  const kb = Math.max(1, Math.ceil(breite / TEILER));
+  const kh = Math.max(1, Math.ceil(hoehe / TEILER));
+
+  const summe = new Float64Array(kb * kh);
+  const anzahl = new Uint32Array(kb * kh);
+  for (let y = 0; y < hoehe; y += 1) {
+    const zeile = (y / TEILER) | 0;
+    for (let x = 0; x < breite; x += 1) {
+      const k = zeile * kb + ((x / TEILER) | 0);
+      summe[k] += data[(y * breite + x) * 4];
+      anzahl[k] += 1;
+    }
+  }
+  const klein = new Float64Array(kb * kh);
+  for (let k = 0; k < klein.length; k += 1) klein[k] = anzahl[k] ? summe[k] / anzahl[k] : 255;
+
+  // Integralbild ueber das verkleinerte Bild: damit kostet jeder Mittelwert
+  // vier Zugriffe, unabhaengig von der Fenstergroesse.
+  const ib = kb + 1;
+  const integral = new Float64Array(ib * (kh + 1));
+  for (let y = 0; y < kh; y += 1) {
+    let zeilensumme = 0;
+    for (let x = 0; x < kb; x += 1) {
+      zeilensumme += klein[y * kb + x];
+      integral[(y + 1) * ib + (x + 1)] = integral[y * ib + (x + 1)] + zeilensumme;
+    }
+  }
+
+  // Das Fenster muss deutlich groesser sein als ein Buchstabe, sonst wird
+  // der Text selbst zum Massstab und loescht sich weg. Ein Sechstel der
+  // Blattbreite liegt weit darueber und bleibt zugleich klein genug, um
+  // dem Schattenverlauf einer Falte zu folgen.
+  const radius = Math.max(3, Math.round(kb / 6));
+  const grund = new Float64Array(kb * kh);
+  for (let y = 0; y < kh; y += 1) {
+    const y0 = Math.max(0, y - radius);
+    const y1 = Math.min(kh, y + radius + 1);
+    for (let x = 0; x < kb; x += 1) {
+      const x0 = Math.max(0, x - radius);
+      const x1 = Math.min(kb, x + radius + 1);
+      const flaeche = (y1 - y0) * (x1 - x0);
+      const wert = integral[y1 * ib + x1] - integral[y0 * ib + x1] - integral[y1 * ib + x0] + integral[y0 * ib + x0];
+      grund[y * kb + x] = wert / flaeche;
+    }
+  }
+
+  // Sieht die Vorlage ueberhaupt nach Papier aus? Das Verfahren setzt voraus,
+  // dass der oertliche Grundton das Blatt ist. Bei einer durchweg dunklen
+  // Vorlage -- heller Text auf schwarzem Grund, ein missratenes Foto -- trifft
+  // das nicht zu; dann wuerde alles zu Weiss und nichts bliebe lesbar.
+  const sortiert = Float64Array.from(grund).sort();
+  const mitte = sortiert[(sortiert.length / 2) | 0];
+  if (mitte < 80) return false;
+
+  // Der oertliche Mittelwert liegt unter dem Papierton, weil Schrift
+  // darinsteckt. Ohne Ausgleich bliebe das Papier grau; 1,06 hebt es zurueck
+  // auf Weiss, ohne duenne Buchstaben mitzureissen.
+  const ZIEL = 255 / 1.06;
+  // Deckel auf die Verstaerkung: In einem tiefen Schatten liegt oft nur noch
+  // Koernung. Ohne Deckel wird sie zu scheinbaren Buchstaben aufgeblasen, und
+  // die Texterkennung haengt "A595" an einen Behandlernamen. Der Faktor drei
+  // holt ein Schattenband zurueck und erfindet nichts.
+  const MAX_VERSTAERKUNG = 3;
+  for (let y = 0; y < hoehe; y += 1) {
+    const zeile = ((y / TEILER) | 0) * kb;
+    for (let x = 0; x < breite; x += 1) {
+      const i = (y * breite + x) * 4;
+      const bezug = Math.max(40, grund[zeile + ((x / TEILER) | 0)]);
+      const wert = data[i] * Math.min(MAX_VERSTAERKUNG, ZIEL / bezug);
+      data[i] = data[i + 1] = data[i + 2] = wert > 255 ? 255 : wert < 0 ? 0 : wert;
+    }
+  }
+  return true;
 }
 
 function alsBild(file) {

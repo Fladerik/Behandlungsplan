@@ -279,15 +279,24 @@ const foldForCompare = (value) => value.toLocaleLowerCase("de-DE")
 /**
  * Sucht den aehnlichsten bekannten Begriff. Die Toleranz waechst mit der
  * Wortlaenge, bleibt aber eng genug, dass aus "Raum 2" nie "Raum 5" wird.
+ *
+ * `spielraum` erweitert sie dort, wo die Texterkennung selbst angibt, unsicher
+ * gelesen zu haben -- siehe correct(). Im Schatten einer Falte wird aus
+ * "Mittagessen" ein "Mfitäyessen"; drei Fehler auf elf Zeichen liegen weit
+ * ueber der normalen Toleranz, und ohne diesen Zusatz bliebe von dem Termin
+ * nur das Wort "Behandlung" uebrig.
  */
-export function bestMatch(value, candidates) {
+export function bestMatch(value, candidates, spielraum = 0) {
   const needle = foldForCompare(value);
   // Ab drei Zeichen, damit auch "Has" noch zu "Haus" findet -- dort aber nur
   // mit Abstand 1, sonst wuerde aus "Bad" ein "Bau".
   if (needle.length < 3) return null;
   // Zahlen unterscheiden Raeume voneinander: nur Kandidaten mit denselben Ziffern.
   const digits = needle.replace(/\D/g, "");
-  const budget = needle.length <= 3 ? 1 : needle.length <= 6 ? 1 : needle.length <= 12 ? 2 : 3;
+  const grundbudget = needle.length <= 3 ? 1 : needle.length <= 6 ? 1 : needle.length <= 12 ? 2 : 3;
+  // Kurze Woerter bleiben eng: bei drei Zeichen wuerde jeder Zusatz aus
+  // beinahe allem beinahe alles machen.
+  const budget = needle.length <= 6 ? grundbudget : grundbudget + spielraum;
   let best = null;
   for (const candidate of candidates) {
     const hay = foldForCompare(candidate);
@@ -480,7 +489,16 @@ function ergaenzeAnrede(text) {
 }
 
 /** Korrigiert einen erkannten Text gegen bekannte Begriffe. */
-export function correct(value, field, lexicon = {}) {
+/**
+ * @param {object} [opts]
+ * @param {number} [opts.sicherheit] Lesesicherheit der Zeile in Prozent, wie
+ *   die Texterkennung sie angibt. Je unsicherer, desto mehr Abweichung darf
+ *   ein bekannter Begriff haben, um noch als derselbe zu gelten. Das ist kein
+ *   Aufweichen der Pruefung, sondern ihr Gegenteil: aufgeweicht wird nur
+ *   dort, wo das Bild selbst sagt, dass es schlecht zu lesen war.
+ */
+export function correct(value, field, lexicon = {}, { sicherheit = 100 } = {}) {
+  const spielraum = sicherheit < 55 ? 2 : sicherheit < 75 ? 1 : 0;
   const roh = clean(value);
   if (!roh) return { value: "", corrected: false };
 
@@ -494,7 +512,7 @@ export function correct(value, field, lexicon = {}) {
   // gepruefte Schreibweise, nicht die auf diesem Geraet gelernte. Gelerntes
   // setzt sich nur durch, wenn es naeher am Gelesenen liegt.
   const pool = [...grundbestand, ...learned];
-  const match = bestMatch(text, pool);
+  const match = bestMatch(text, pool, spielraum);
   if (!match) {
     const wortweise = korrigiereWortweise(text, grundbestand);
     return wortweise === roh
@@ -535,12 +553,16 @@ function tsvFragments(tsv) {
     if (cells.length < 12 || cells[0] !== "5") continue;
     const text = clean(cells.slice(11).join("\t"));
     const confidence = Number(cells[10]);
-    // Bewusst niedrig angesetzt: Abkuerzungen mit vielen Punkten
-    // ("Beweg.ther.Sch.") liest die Texterkennung mit Konfidenz um 15. Ein
-    // Termin ohne Anwendung ist schlechter als einer mit unsicherer, in der
-    // Pruefansicht markierter Anwendung. Reines Satzzeichen-Rauschen faellt
-    // ueber die zweite Bedingung heraus.
-    if (!text || confidence < 8 || !/[A-Za-zÄÖÜäöüß0-9]/.test(text)) continue;
+    // Kein Schwellwert auf die Sicherheitsangabe mehr.
+    //
+    // Frueher fielen Woerter unter 8 heraus. Auf einem gefalteten Blatt ist
+    // dieser Wert aber kein Mass fuer Richtigkeit: gemessen wurden
+    // "Arztgespräch." mit 0 und "Kanzach" mit 0 -- beide richtig gelesen --
+    // und daneben ein Fleck "IH" mit 95. Die Angabe trennt hier nichts, sie
+    // hat nur richtige Woerter gekostet: der Termin hiess danach "ausf. 18".
+    // Reines Satzzeichen-Rauschen faellt weiterhin ueber die zweite
+    // Bedingung heraus, und das ist die einzige, die haelt, was sie sagt.
+    if (!text || !/[A-Za-zÄÖÜäöüß0-9]/.test(text)) continue;
     const key = `${cells[1]}-${cells[2]}-${cells[3]}-${cells[4]}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push({
@@ -799,10 +821,29 @@ function findColumns(lines) {
 function columnIndexAt(anchors, cell) {
   let chosen = 0;
   for (let index = 0; index < anchors.length; index += 1) {
-    // Toleranz nach links, weil Zellinhalte etwas vor der Ueberschrift beginnen.
-    if (cell.left >= anchors[index].left - 24) chosen = index;
+    if (cell.left >= anchors[index].left - spaltenToleranz(anchors, index)) chosen = index;
   }
   return chosen;
+}
+
+/**
+ * Wie weit eine Zelle links vor ihrer Spaltenueberschrift beginnen darf.
+ *
+ * Feste 24 Bildpunkte waren zu wenig. Ein gefaltetes Blatt verschiebt die
+ * Zeilen entlang der Bruchkante seitlich -- gemessen wurden dreissig bis
+ * vierzig Punkte. Die Zelle rutschte damit in die Spalte links daneben: aus
+ * dem Heilmittel wurde eine Ortsangabe, der Termin hiess danach nur noch
+ * "Behandlung". Betroffen war jede Zeile auf einer Falte.
+ *
+ * Die Toleranz richtet sich deshalb nach dem Abstand der Spalten: knapp ein
+ * Drittel davon. Breite Spalten vertragen viel, enge wenig -- und in keinem
+ * Fall reicht sie bis zur Mitte, sodass eine Zelle nie der falschen Spalte
+ * naeher sein kann als der eigenen.
+ */
+function spaltenToleranz(anchors, index) {
+  if (index === 0) return 24;
+  const abstand = anchors[index].left - anchors[index - 1].left;
+  return Math.min(90, Math.max(24, abstand * 0.3));
 }
 
 /** Fuegt die Spalten-Slots zu den Feldern eines Termins zusammen. */
@@ -1195,6 +1236,68 @@ function holeAnwendungAusOrt(ort, lexicon) {
 }
 
 /**
+ * Moegliche Uhrzeiten aus einem beschaedigten Zeitfeld.
+ *
+ * Auf der Bruchkante eines gefalteten Blattes zerfaellt die Uhrzeit: aus
+ * "11:30" wird "A130" -- der Doppelpunkt ist weg, die erste Ziffer ist zu
+ * einem Buchstaben geworden. normalizeTime kann damit nichts anfangen, und
+ * der ganze Termin fiel bisher aus.
+ *
+ * Hier wird jede unlesbare Stelle als Platzhalter behandelt und durch alle
+ * zehn Ziffern ersetzt. Aus "A130" werden so 01:30, 11:30 und 21:30 -- drei
+ * Moeglichkeiten, von denen nur eine stimmen kann. Welche, entscheidet nicht
+ * dieser Code, sondern die Reihenfolge des Plans: siehe repariereZeiten.
+ */
+function zeitKandidaten(text) {
+  const roh = String(text).replace(/[oO°]/g, "0").replace(/[lI|]/g, "1").replace(/[sS]/g, "5")
+    .replace(/[.,;:]/g, "").replace(/\s+/g, "");
+  if (roh.length !== 4) return [];
+  const ziffern = (roh.match(/\d/g) || []).length;
+  // Mindestens die Haelfte muss lesbar sein, sonst ist es keine Uhrzeit,
+  // sondern irgendein Fleck.
+  if (ziffern < 3) return [];
+  const stellen = [...roh];
+  const offen = stellen.map((z, i) => (/\d/.test(z) ? -1 : i)).filter((i) => i >= 0);
+  if (!offen.length) return [];
+  const ergebnis = new Set();
+  const setze = (rest, stand) => {
+    if (!rest.length) {
+      const stunde = Number(stand.slice(0, 2));
+      const minute = Number(stand.slice(2));
+      if (stunde < 24 && minute < 60) ergebnis.add(`${String(stunde).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+      return;
+    }
+    const [stelle, ...weiter] = rest;
+    for (let z = 0; z <= 9; z += 1) setze(weiter, stand.slice(0, stelle) + z + stand.slice(stelle + 1));
+  };
+  setze(offen, stellen.join(""));
+  return [...ergebnis];
+}
+
+/**
+ * Setzt beschaedigte Uhrzeiten anhand der Reihenfolge wieder ein.
+ *
+ * Ein Behandlungsplan laeuft von morgens nach abends. Steht zwischen 10:25
+ * und 15:00 eine Zeile, deren Zeitfeld "A130" heisst, dann ist von 01:30,
+ * 11:30 und 21:30 genau eine moeglich. Bleibt mehr als eine uebrig, wird
+ * nichts eingesetzt -- geraten wird nicht.
+ */
+function repariereZeiten(rows, offene) {
+  let eingesetzt = 0;
+  for (const eintrag of offene) {
+    const davor = rows[eintrag.stelle - 1]?.time || "00:00";
+    const danach = rows[eintrag.stelle]?.time || "23:59";
+    const passend = eintrag.kandidaten.filter((zeit) => zeit > davor && zeit < danach);
+    if (passend.length !== 1) continue;
+    eintrag.row.time = passend[0];
+    rows.splice(eintrag.stelle, 0, eintrag.row);
+    for (const spaeter of offene) if (spaeter.stelle > eintrag.stelle) spaeter.stelle += 1;
+    eingesetzt += 1;
+  }
+  return eingesetzt;
+}
+
+/**
  * Findet den Anfang einer Tabellenzeile, wenn links vor der Uhrzeit noch
  * fremder Text klebt.
  *
@@ -1232,13 +1335,20 @@ function fromLines(lines, columns, lexicon) {
   // korrigiert -- sonst wuerde "Krankengymnastik im" schon begradigt, bevor
   // "Bewegungsbad" dazukommt.
   const rows = [];
+  const offeneZeiten = [];
   let previous = null;
   let skipped = 0;
   const bekannt = wortbestand(lexicon);
 
   for (let line of lines) {
     const text = clean(line.text);
-    if (isChrome(text) || isNoteLine(text) || (columns && line.top < columns.top - 4)) { previous = null; continue; }
+    // Alles oberhalb der Spaltenueberschrift ist Briefkopf, nicht Tabelle.
+    // Gemessen wird an der Unterkante der Zeile, nicht an ihrer Oberkante:
+    // auf einem gefalteten oder leicht gedrehten Blatt steht die erste
+    // Terminzeile links hoeher als die Ueberschrift rechts endet. Mit der
+    // Oberkante fiel sie durch dieses Raster -- und das war auf jeder Seite
+    // der erste Termin des Tages, das Fruehstueck.
+    if (isChrome(text) || isNoteLine(text) || (columns && line.bottom <= columns.top - 4)) { previous = null; continue; }
     if (isColumnHeading(text) && !extractTime(line.words)) { previous = null; continue; }
 
     let stamp = extractTime(line.words);
@@ -1249,6 +1359,26 @@ function fromLines(lines, columns, lexicon) {
       if (versetzt) {
         const erneut = extractTime(versetzt.words);
         if (erneut) { line = versetzt; stamp = erneut; }
+      }
+    }
+
+    if (!stamp && columns && line.words?.length > 1) {
+      // Zeitfeld beschaedigt? Dann die Zeile vormerken; welche Uhrzeit es war,
+      // entscheidet spaeter die Reihenfolge der uebrigen Termine.
+      const erstes = line.words[0];
+      const kandidaten = erstes.left < columns.anchors[0].right + 40 ? zeitKandidaten(erstes.text) : [];
+      if (kandidaten.length) {
+        const zellen = splitCells(line.words.slice(1), line.height);
+        if (zellen.length) {
+          const slots = assignByColumns(zellen, columns.anchors).slots;
+          offeneZeiten.push({
+            stelle: rows.length,
+            kandidaten,
+            row: { time: "", end: "", cells: zellen, slots, confidence: Math.min(line.confidence, ...zellen.map((zelle) => zelle.confidence)) },
+          });
+          previous = null;
+          continue;
+        }
       }
     }
 
@@ -1300,6 +1430,10 @@ function fromLines(lines, columns, lexicon) {
     previous = { row, bottom: line.bottom, height: line.height };
   }
 
+  // Beschaedigte Uhrzeiten einsetzen, solange die Reihenfolge sie eindeutig
+  // macht. Was uebrig bleibt, zaehlt weiter als uebersprungene Zeile.
+  skipped += offeneZeiten.length - repariereZeiten(rows, offeneZeiten);
+
   // Schritt 2: Zellen zuordnen, Fortsetzungen anhaengen, dann korrigieren.
   const items = rows.map((row) => {
     let assigned;
@@ -1323,6 +1457,23 @@ function fromLines(lines, columns, lexicon) {
 
     const anwendungen = [...Object.keys(lexicon.title || {}), ...KNOWN_TREATMENTS];
     const istAnwendung = (wert) => Boolean(clean(wert) && bestMatch(wert, anwendungen));
+
+    // Streureste aus der Titelspalte entfernen.
+    //
+    // Ein gefaltetes Blatt hinterlaesst Flecken, die als kurze Zeichenfolgen
+    // gelesen werden: hinter "ausf. Arztgespräch." stand eine "18", und der
+    // Termin hiess danach "ausf. 18". Die Spalte besteht aber aus mehreren
+    // Zellen, und eine davon ist die richtige. Passt die Zusammensetzung zu
+    // keiner bekannten Anwendung, wohl aber eine ihrer Zellen, gilt die Zelle.
+    if (columns && !istAnwendung(assigned.title)) {
+      const spalten = columns.anchors
+        .map((anker, i) => (anker.role === "title" ? row.slots[i] : null))
+        .filter((zellen) => zellen && zellen.length > 1);
+      for (const zellen of spalten) {
+        const treffer = zellen.find((zelle) => istAnwendung(zelle));
+        if (treffer) { assigned.title = clean(treffer); break; }
+      }
+    }
 
     // Ein Hinweistext in der Titelspalte wird verworfen, bevor gesucht wird --
     // sonst bliebe er als Terminname stehen.
@@ -1362,9 +1513,10 @@ function fromLines(lines, columns, lexicon) {
       }
     }
 
-    const title = correct(assigned.title, "title", lexicon);
-    const practitioner = correct(assigned.practitioner, "practitioner", lexicon);
-    const location = correct(tidyLocation(assigned.location), "location", lexicon);
+    const lesegute = { sicherheit: row.confidence };
+    const title = correct(assigned.title, "title", lexicon, lesegute);
+    const practitioner = correct(assigned.practitioner, "practitioner", lexicon, lesegute);
+    const location = correct(tidyLocation(assigned.location), "location", lexicon, lesegute);
 
     return {
       id: newId(),
