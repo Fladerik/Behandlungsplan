@@ -854,10 +854,32 @@ function slotsToFields(slots, anchors) {
   return {
     title: pick("title").join(" "),
     location: pick("location").join(", "),
-    practitioner: pick("practitioner").join(" "),
+    practitioner: ohneRest(pick("practitioner").join(" ")),
     note: pick(null).join(" · "),
     byColumn: true,
   };
+}
+
+/**
+ * Schneidet Flecken hinter einem Behandlernamen ab.
+ *
+ * Am rechten Blattrand liest die Texterkennung Knicke und Koernung als kurze
+ * Zeichenfolgen: aus "Selbständiges Üben" wurde "Selbständiges Üben A595",
+ * aus "Herr R. Mörschel" ein "Herr R. Mörschel FF". Ein Name endet nie auf
+ * einer solchen Gruppe -- Grossbuchstaben und Ziffern ohne einen einzigen
+ * Kleinbuchstaben, hoechstens vier Zeichen lang.
+ *
+ * Nur im Behandlerfeld. In der Ortsspalte waere dieselbe Regel falsch: dort
+ * endet "Therapeutikum, 2. OG" voellig richtig auf zwei Grossbuchstaben.
+ */
+function ohneRest(wert) {
+  const teile = clean(wert).split(" ");
+  while (teile.length > 1) {
+    const letztes = teile[teile.length - 1];
+    if (letztes.length > 4 || /[a-zäöüß]/.test(letztes) || !/[A-ZÄÖÜ0-9]/.test(letztes)) break;
+    teile.pop();
+  }
+  return teile.join(" ");
 }
 
 function assignByColumns(cells, anchors) {
