@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#871c31">
+  <meta name="robots" content="index,follow">
+  <title>Impressum &amp; Datenschutz · Federsee Terminplan</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    body { padding-bottom: 40px; }
+    .rechts-kopf {
+      background: linear-gradient(180deg, var(--marke-800), var(--marke-900));
+      color: #fff; padding: calc(20px + env(safe-area-inset-top, 0px)) 16px 22px;
+    }
+    .rechts-kopf .innen { max-width: 720px; margin: 0 auto; }
+    .rechts-kopf h1 { font-size: 21px; letter-spacing: -.015em; }
+    .rechts-kopf p { margin: 5px 0 0; font-size: 13.5px; color: rgba(255,255,255,.74); }
+    .rechts-inhalt { max-width: 720px; margin: 0 auto; padding: 22px 16px 0; }
+    .rechts-inhalt section { margin-bottom: 30px; }
+    .rechts-inhalt h2 {
+      font-size: 17px; margin-bottom: 10px; padding-bottom: 7px;
+      border-bottom: 1px solid var(--line);
+    }
+    .rechts-inhalt h3 { font-size: 14.5px; margin: 18px 0 5px; }
+    .rechts-inhalt p, .rechts-inhalt li { font-size: 14.5px; line-height: 1.62; color: var(--ink-soft); }
+    .rechts-inhalt p { margin: 0 0 11px; }
+    .rechts-inhalt ul { margin: 0 0 11px; padding-left: 20px; }
+    .rechts-inhalt strong { color: var(--ink); }
+    .rechts-inhalt a { color: var(--marke-700); font-weight: 600; }
+    .adressblock {
+      background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--marke-600);
+      border-radius: 11px; padding: 14px 16px; margin-bottom: 14px;
+    }
+    .adressblock p { margin: 0; color: var(--ink); line-height: 1.6; }
+    .adressblock a { color: var(--marke-700); font-weight: 600; }
+    .zurueck { display: inline-block; margin: 8px 0 26px; color: var(--marke-700); font-weight: 600; }
+    .marken { display: flex; gap: 14px; align-items: center; margin: 0 0 18px; }
+  .marken img { width: 56px; height: 56px; border-radius: 12px; }
+</style>
+</head>
+<body>
+
+<header class="rechts-kopf">
+  <div class="innen">
+    <h1>Impressum &amp; Datenschutz</h1>
+    <p>Federsee Terminplan — eine Anwendung von Fugo Labs</p>
+  </div>
+</header>
+
+<main class="rechts-inhalt">
+  <a class="zurueck" href="./">← Zurück zum Terminplan</a>
+
+  <section id="impressum">
+    <h2>Impressum</h2>
+
+    <!-- Die Produktzeichen erscheinen nur, wenn die Dateien danebenliegen.
+         Fehlen sie, bleibt die Seite unveraendert -- so laesst sich ein Logo
+         jederzeit nachreichen, ohne am Code etwas zu aendern. -->
+    <p id="marken" class="marken" hidden>
+      <img id="marke-fugo" alt="FUGO Labs" hidden>
+      <img id="marke-tam2" alt="TaM² — Tag a Moment" hidden>
+    </p>
+
+    <h3>Angaben gemäß § 5 DDG</h3>
+    <div class="adressblock">
+      <p>
+        Erik Stieler<br>
+        Graf-Stauffenberg-Straße 44<br>
+        73450 Neresheim<br>
+        Deutschland
+      </p>
+    </div>
+
+    <h3>Kontakt</h3>
+    <div class="adressblock">
+      <p>
+        Telefon: <a href="tel:+4915128753777">0151 28753777</a><br>
+        E-Mail: <a href="mailto:erik@cameraorganizer.com">erik@cameraorganizer.com</a>
+      </p>
+    </div>
+
+    <h3>Verantwortlich für den Inhalt</h3>
+    <p>Erik Stieler, Anschrift wie oben.</p>
+
+    <h3>Haftung für Inhalte</h3>
+    <p>Als Diensteanbieter sind wir für eigene Inhalte auf diesen Seiten nach den allgemeinen
+      Gesetzen verantwortlich. Wir sind nicht verpflichtet, übermittelte oder gespeicherte fremde
+      Informationen zu überwachen oder nach Umständen zu forschen, die auf eine rechtswidrige
+      Tätigkeit hinweisen.</p>
+
+    <h3>Hinweis zur Nutzung</h3>
+    <p>Der Federsee Terminplan ist ein <strong>privates Hilfsmittel zur eigenen Organisation</strong>.
+      Er wird nicht von einer Klinik herausgegeben und ersetzt keinen offiziellen Behandlungsplan.
+      Maßgeblich ist stets der von der Einrichtung ausgegebene Plan. Erkannte Termine sind vor der
+      Nutzung zu prüfen; für die Richtigkeit der automatischen Texterkennung wird keine Gewähr
+      übernommen.</p>
+  </section>
+
+  <section id="datenschutz">
+    <h2>Datenschutzerklärung</h2>
+
+    <h3>Kurz gefasst</h3>
+    <p><strong>Ihre Daten bleiben auf diesem Gerät.</strong> Behandlungspläne, Fotos und Termine
+      werden ausschließlich in Ihrem Browser verarbeitet und dort gespeichert. Es findet keine
+      Übertragung an den Server dieser Website oder an Dritte statt.</p>
+
+    <h3>Welche Daten verarbeitet werden</h3>
+    <ul>
+      <li>Die von Ihnen ausgewählten Fotos oder PDF-Dateien Ihres Behandlungsplans</li>
+      <li>Die daraus erkannten Termine mit Uhrzeit, Anwendung, Ort und Behandler</li>
+      <li>Ein frei gewählter Anzeigename für die Begrüßung</li>
+    </ul>
+    <p>Diese Daten liegen im lokalen Speicher Ihres Browsers (<em>localStorage</em>). Sie verlassen
+      Ihr Gerät nicht und sind für den Betreiber dieser Website nicht einsehbar.</p>
+
+    <h3>Texterkennung</h3>
+    <p>Die Erkennung des Plans läuft vollständig auf Ihrem Gerät. Die dafür nötige Software und das
+      deutsche Sprachmodell werden einmalig von diesem Server geladen und danach lokal
+      vorgehalten. Ihre Bilder werden zu keinem Zeitpunkt hochgeladen.</p>
+
+    <h3>Server-Logdateien</h3>
+    <p>Beim Aufruf dieser Seite erhebt der Hostinganbieter automatisch Zugriffsdaten
+      (IP-Adresse, Zeitpunkt, abgerufene Datei, Browsertyp). Diese Daten dienen ausschließlich dem
+      technischen Betrieb und der Sicherheit. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO.</p>
+
+    <h3>Keine Cookies, keine Analyse</h3>
+    <p>Diese Anwendung setzt keine Cookies zu Analyse- oder Werbezwecken ein. Es findet keine
+      Reichweitenmessung und kein Einsatz externer Dienste statt.</p>
+
+    <h3>Ihre Rechte</h3>
+    <p>Da keine personenbezogenen Daten beim Betreiber gespeichert werden, laufen Auskunfts- und
+      Löschansprüche gegenüber dieser Anwendung ins Leere. Ihre lokal gespeicherten Daten können
+      Sie jederzeit selbst löschen: im Menü unter <strong>„Alle Daten löschen“</strong> oder über
+      die Einstellungen Ihres Browsers.</p>
+
+    <h3>Wichtiger Hinweis zum Datenverlust</h3>
+    <p>Wenn Sie Browserdaten, Websitedaten oder Cookies für diese Website löschen, werden auch die
+      lokal gespeicherten Termine entfernt. Erstellen Sie bei Bedarf vorher eine Sicherung
+      (Menü → „Sicherung speichern“) oder übernehmen Sie die Termine in Ihren Kalender.</p>
+
+    <h3>Verantwortlich</h3>
+    <p>Erik Stieler, Graf-Stauffenberg-Straße 44, 73450 Neresheim. Kontakt siehe Impressum.</p>
+  </section>
+
+  <a class="zurueck" href="./">← Zurück zum Terminplan</a>
+</main>
+
+<script type="module">
+  // Wie in der App: vorhandene Logos einsetzen, fehlende stillschweigend
+  // auslassen. Ein fehlendes Bild darf das Impressum nicht entstellen.
+  for (const [id, datei] of [["#marke-fugo", "./logo.png"], ["#marke-tam2", "./logo-tam2.png"]]) {
+    const ziel = document.querySelector(id);
+    const pruefung = new Image();
+    pruefung.onload = () => {
+      ziel.src = datei;
+      ziel.hidden = false;
+      document.querySelector("#marken").hidden = false;
+    };
+    pruefung.src = datei;
+  }
+</script>
+</body>
+</html>

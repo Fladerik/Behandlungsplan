@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0e3a6b">
+  <meta name="description" content="Behandlungsplan fotografieren, Termine prüfen und auf dem eigenen Gerät behalten.">
+  <title>Federsee Terminplan</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <!-- Logo: Liegt eine Datei "logo.png" (oder logo.svg) neben index.html,
+           wird sie automatisch verwendet. Ohne Datei bleibt das Kalender-
+           symbol stehen. Es ist also kein Eingriff in den Code nötig. -->
+      <img id="brand-logo" class="brand-logo" alt="FUGO Labs" hidden>
+      <span id="brand-fallback" class="brand-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8.5" cy="14.5" r="1.3" fill="currentColor"/><circle cx="12" cy="14.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="14.5" r="1.3" fill="currentColor"/></svg>
+      </span>
+      <div class="brand-text">
+        <h1 id="greeting" data-anwendung>Federsee Terminplan</h1>
+        <p id="brand-sub">Ihr Therapie- und Tagesplan</p>
+      </div>
+    </div>
+    <button id="menu-button" class="icon-button" aria-label="Menü öffnen" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/></svg>
+    </button>
+  </div>
+
+  <!-- Nächster Termin: die wichtigste Information, immer sichtbar -->
+  <section id="next-up" class="next-up" aria-live="polite" aria-label="Nächster Termin"></section>
+
+  <!-- Tagesleiste: heute plus die folgenden Tage -->
+  <nav class="day-strip" id="day-strip" aria-label="Tage"></nav>
+</header>
+
+<main id="view-plan">
+  <div class="toolbar">
+    <div class="chips" id="category-filter" role="group" aria-label="Nach Kategorie filtern"></div>
+    <div class="search-row">
+      <input id="search" type="search" placeholder="Termin oder Ort suchen …" aria-label="Suchen" autocomplete="off">
+      <button id="calendar-button" class="ghost-button">Kalender</button>
+    </div>
+  </div>
+
+  <div id="plan-list" class="plan-list"></div>
+
+  <section id="empty-state" class="empty-state" hidden>
+    <h2>Noch kein Plan hinterlegt</h2>
+    <p>Fotografieren Sie Ihren Behandlungsplan oder laden Sie ihn als PDF hoch. Die Termine werden erkannt, Sie prüfen sie einmal – danach stehen sie dauerhaft auf diesem Gerät.</p>
+    <p class="hint">Bekommen Sie einen geänderten Plan, fotografieren Sie ihn einfach erneut. Der neue Plan ersetzt den alten Tag – beliebig oft.</p>
+    <button class="primary-button" data-open-scan>Plan fotografieren oder hochladen</button>
+  </section>
+</main>
+
+<!-- Aktionsleiste unten, damit sie am Telefon mit dem Daumen erreichbar ist -->
+<nav class="action-bar">
+  <button class="primary-button" data-open-scan>
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>
+    Plan scannen
+  </button>
+  <button id="add-item" class="secondary-button">+ Termin</button>
+</nav>
+
+<footer class="app-foot">
+  <p class="app-foot-brand">
+    Designed by
+    <a href="https://www.cameraorganizer.com" target="_blank" rel="noopener">FUGO&nbsp;Labs</a>
+  </p>
+  <p class="app-foot-links">
+    <a href="https://www.cameraorganizer.com" target="_blank" rel="noopener">FUGO</a>
+    <span aria-hidden="true">·</span>
+    <a class="tam" href="https://www.fugo-labs.de/tam2" target="_blank" rel="noopener">TaM²</a>
+    <span aria-hidden="true">·</span>
+    <a href="./rechtliches.html#impressum">Impressum</a>
+    <span aria-hidden="true">·</span>
+    <a href="./rechtliches.html#datenschutz">Datenschutz</a>
+  </p>
+  <p class="app-foot-note">Alle Daten bleiben auf diesem Gerät. Bitte erkannte Termine vor der Nutzung prüfen.</p>
+</footer>
+
+<input id="file-input" type="file" accept="image/*,.heic,.heif,application/pdf" multiple hidden>
+
+<!-- ------------------------------------------------------------ Kalender -->
+<dialog id="calendar-dialog" class="sheet" aria-label="Kalender und Archiv">
+  <div class="sheet-head">
+    <h2>Kalender</h2>
+    <button class="icon-button" data-close aria-label="Schließen">✕</button>
+  </div>
+  <div class="sheet-body">
+  <div class="month-head">
+    <button class="icon-button" id="month-prev" aria-label="Vorheriger Monat">‹</button>
+    <strong id="month-label"></strong>
+    <button class="icon-button" id="month-next" aria-label="Nächster Monat">›</button>
+  </div>
+  <div class="weekday-row" aria-hidden="true"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
+  <div id="month-grid" class="month-grid"></div>
+  <div id="calendar-day" class="calendar-day"></div>
+  </div>
+</dialog>
+
+<!-- ------------------------------------------------------- Prüfen & Speichern -->
+<dialog id="review-dialog" class="sheet wide" aria-label="Erkannte Termine prüfen">
+  <div class="sheet-head">
+    <h2>Erkannte Termine prüfen</h2>
+    <button class="icon-button" data-close aria-label="Schließen">✕</button>
+  </div>
+  <div id="review-progress" class="progress" hidden>
+    <div class="progress-figure" aria-hidden="true">
+      <svg viewBox="0 0 48 48" width="46" height="46">
+        <rect x="9" y="5" width="30" height="38" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M15 15h18M15 22h18M15 29h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+        <circle cx="34" cy="34" r="9.5" fill="var(--paper)" stroke="currentColor" stroke-width="2"/>
+        <path d="M34 29v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h3>Der Plan wird gelesen</h3>
+    <p class="progress-lead">Das geschieht vollständig auf diesem Gerät – je nach Anzahl der Seiten
+      dauert es einige Sekunden. Bitte das Fenster offen lassen.</p>
+    <div class="progress-track"><div id="progress-bar"></div></div>
+    <p id="progress-text">Vorbereitung …</p>
+  </div>
+  <div id="review-body" class="review-body"></div>
+  <div class="sheet-foot" id="review-foot" hidden>
+    <button id="review-cancel" class="ghost-button">Verwerfen</button>
+    <button id="review-save" class="primary-button">Speichern</button>
+  </div>
+</dialog>
+
+<!-- --------------------------------------------------------------- Menü -->
+<dialog id="menu-dialog" class="sheet" aria-label="Menü">
+  <div class="sheet-head">
+    <h2>Einstellungen &amp; Daten</h2>
+    <button class="icon-button" data-close aria-label="Schließen">✕</button>
+  </div>
+  <div class="menu-body">
+    <label class="field">
+      <span>Name (nur auf diesem Gerät)</span>
+      <input id="profile-name" placeholder="z. B. Erika Musterfrau" autocomplete="name">
+    </label>
+    <label class="field">
+      <span>Erinnerung beim Kalenderexport</span>
+      <select id="reminder">
+        <option value="0">keine</option>
+        <option value="10">10 Minuten vorher</option>
+        <option value="15" selected>15 Minuten vorher</option>
+        <option value="30">30 Minuten vorher</option>
+        <option value="60">1 Stunde vorher</option>
+      </select>
+    </label>
+
+    <div class="menu-group">
+      <h3>Termine weitergeben</h3>
+      <button id="export-ics" class="ghost-button">Kommende Termine als Kalenderdatei</button>
+    </div>
+
+    <div class="menu-group">
+      <h3>Gerätewechsel &amp; Sicherung</h3>
+      <p class="hint">Die Daten liegen ausschließlich in diesem Browser. Für ein neues Gerät oder vor dem Löschen der Browserdaten hier eine Sicherungsdatei erzeugen.</p>
+      <button id="export-backup" class="ghost-button">Sicherung speichern</button>
+      <button id="import-backup" class="ghost-button">Sicherung einlesen</button>
+      <button id="export-diagnose" class="ghost-button">Diagnose der letzten Erkennung speichern</button>
+    </div>
+
+    <div class="menu-group">
+      <h3>App weitergeben</h3>
+      <p class="hint">Mit der Kamera abfotografieren — der Plan öffnet sich direkt, ohne Anmeldung.</p>
+      <div class="qr-block">
+        <div class="qr-bild"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41" width="100%" height="100%" role="img" aria-label="QR-Code zur App" class="segno"><path class="qrline" stroke="#0a2547" d="M2 2.5h7m1 0h1m1 0h3m2 0h2m6 0h4m3 0h7m-37 1h1m5 0h1m5 0h4m1 0h2m3 0h1m3 0h1m1 0h1m1 0h1m5 0h1m-37 1h1m1 0h3m1 0h1m1 0h1m1 0h2m2 0h2m3 0h3m1 0h2m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m-37 1h1m1 0h3m1 0h1m5 0h1m4 0h1m4 0h2m1 0h1m2 0h1m1 0h1m1 0h3m1 0h1m-37 1h1m1 0h3m1 0h1m1 0h7m3 0h1m1 0h4m6 0h1m1 0h3m1 0h1m-37 1h1m5 0h1m2 0h7m1 0h1m1 0h1m1 0h1m1 0h2m3 0h1m1 0h1m5 0h1m-37 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-29 1h3m3 0h1m2 0h1m4 0h1m1 0h1m1 0h3m-24 1h2m2 0h3m2 0h5m1 0h3m1 0h3m3 0h1m1 0h1m1 0h1m1 0h1m-37 1h1m2 0h1m1 0h1m1 0h3m1 0h2m3 0h1m1 0h2m3 0h1m1 0h3m1 0h1m1 0h3m-34 1h1m3 0h3m1 0h2m2 0h1m1 0h1m1 0h1m1 0h1m1 0h3m1 0h4m2 0h4m1 0h2m-35 1h1m1 0h1m3 0h1m1 0h2m3 0h4m1 0h2m4 0h1m1 0h1m1 0h2m1 0h1m1 0h2m-36 1h1m1 0h2m1 0h1m2 0h4m1 0h1m2 0h1m10 0h1m1 0h2m4 0h1m-36 1h1m1 0h1m4 0h1m2 0h1m1 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h3m1 0h1m2 0h1m-30 1h2m2 0h1m2 0h1m1 0h2m1 0h6m4 0h1m3 0h1m1 0h1m1 0h2m-36 1h1m1 0h3m3 0h3m2 0h1m1 0h1m1 0h3m2 0h2m2 0h4m2 0h4m-36 1h1m1 0h4m3 0h2m2 0h1m1 0h4m1 0h1m1 0h1m1 0h3m1 0h2m1 0h1m1 0h1m1 0h1m-36 1h1m2 0h2m1 0h3m1 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h4m2 0h1m1 0h1m-34 1h2m1 0h1m1 0h2m1 0h1m2 0h2m6 0h1m1 0h1m1 0h6m2 0h1m1 0h2m1 0h1m-35 1h3m4 0h1m1 0h1m1 0h3m2 0h2m1 0h1m1 0h1m3 0h3m3 0h1m1 0h1m-35 1h1m1 0h1m1 0h3m1 0h1m4 0h1m5 0h1m4 0h2m3 0h5m-33 1h3m2 0h2m2 0h1m5 0h2m2 0h2m1 0h5m2 0h2m1 0h1m-33 1h1m3 0h1m2 0h6m2 0h2m1 0h1m1 0h6m2 0h1m2 0h4m-37 1h1m2 0h2m2 0h4m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m5 0h1m1 0h1m1 0h1m4 0h1m-37 1h1m1 0h5m4 0h3m2 0h3m2 0h4m1 0h1m1 0h1m1 0h2m1 0h1m2 0h1m-37 1h2m2 0h1m2 0h1m1 0h3m2 0h1m1 0h7m1 0h1m2 0h3m1 0h1m1 0h1m1 0h1m-36 1h1m1 0h1m3 0h2m4 0h3m4 0h2m3 0h4m2 0h1m1 0h1m2 0h2m-37 1h1m1 0h2m1 0h1m3 0h3m1 0h2m1 0h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h2m1 0h1m1 0h2m1 0h1m-37 1h1m1 0h2m2 0h1m2 0h3m5 0h4m1 0h1m1 0h11m-27 1h3m1 0h1m7 0h1m2 0h1m4 0h1m3 0h2m-34 1h7m2 0h2m1 0h3m3 0h2m1 0h5m1 0h2m1 0h1m1 0h3m1 0h1m-37 1h1m5 0h1m1 0h1m1 0h1m2 0h4m1 0h3m2 0h1m3 0h2m3 0h2m2 0h1m-37 1h1m1 0h3m1 0h1m3 0h3m2 0h1m4 0h1m2 0h10m1 0h2m-36 1h1m1 0h3m1 0h1m4 0h2m11 0h1m1 0h2m2 0h1m2 0h2m-35 1h1m1 0h3m1 0h1m2 0h1m1 0h1m1 0h2m2 0h6m5 0h2m1 0h1m4 0h1m-37 1h1m5 0h1m3 0h1m1 0h4m1 0h2m3 0h2m2 0h1m1 0h1m3 0h2m2 0h1m-37 1h7m2 0h2m4 0h3m3 0h2m1 0h1m2 0h2m7 0h1"/></svg></div>
+        <p class="qr-adresse"><a href="https://fladerik.github.io/Behandlungsplan/">fladerik.github.io/Behandlungsplan/</a></p>
+      </div>
+      <input id="backup-input" type="file" accept="application/json,.json" hidden>
+    </div>
+
+    <div class="menu-group">
+      <h3>Datenschutz &amp; Daten</h3>
+      <p class="hint" id="privacy-text"></p>
+    </div>
+
+    <div class="menu-group danger">
+      <h3>Alles löschen</h3>
+      <p class="hint">Entfernt sämtliche Termine von diesem Gerät. Das lässt sich nicht rückgängig machen.</p>
+      <button id="clear-all" class="danger-button">Alle Daten löschen</button>
+    </div>
+
+    <p class="storage-note" id="storage-note"></p>
+    <p class="storage-note" id="fassung-note"></p>
+
+    <div class="menu-group">
+      <h3>Über diese App</h3>
+      <p class="hint">Der <strong data-anwendung>Federsee Terminplan</strong> arbeitet ohne Anmeldung und ohne
+        Server. Designed by <a href="https://www.cameraorganizer.com" target="_blank" rel="noopener">FUGO Labs</a>.</p>
+      <p class="hint produkte">
+        <a href="https://www.cameraorganizer.com" target="_blank" rel="noopener">
+          <img id="produkt-logo-fugo" class="produkt-logo" alt="" hidden>FUGO — Tag Your Life</a><br>
+        <a class="tam" href="https://www.fugo-labs.de/tam2" target="_blank" rel="noopener">
+          <img id="produkt-logo-tam2" class="produkt-logo" alt="" hidden>TaM² — Tag a Moment</a>
+      </p>
+      <p class="hint">
+        <a href="./rechtliches.html#impressum">Impressum</a> ·
+        <a href="./rechtliches.html#datenschutz">Datenschutz</a>
+      </p>
+    </div>
+  </div>
+</dialog>
+
+<!-- --------------------------------------------------------- Termin bearbeiten -->
+<dialog id="item-dialog" class="sheet" aria-label="Termin bearbeiten">
+  <form id="item-form" method="dialog">
+    <div class="sheet-head">
+      <h2 id="item-dialog-title">Termin</h2>
+      <button type="button" class="icon-button" data-close aria-label="Schließen">✕</button>
+    </div>
+    <div class="menu-body">
+      <div class="field-row">
+        <label class="field"><span>Datum</span><input name="date" type="date" required></label>
+        <label class="field"><span>Uhrzeit</span><input name="time" type="time" required></label>
+        <label class="field short"><span>Dauer</span><input name="duration" type="number" min="5" max="480" step="5" value="30"></label>
+      </div>
+      <label class="field"><span>Anwendung</span><input name="title" required placeholder="z. B. Krankengymnastik"></label>
+      <label class="field"><span>Ort</span><input name="location" placeholder="z. B. Haus 2, Raum 214"></label>
+      <label class="field"><span>Behandler</span><input name="practitioner" placeholder="z. B. Frau Müller"></label>
+      <label class="field"><span>Kategorie</span><select name="category" id="item-category"></select></label>
+      <label class="field"><span>Notiz</span><input name="note" placeholder="optional"></label>
+    </div>
+    <div class="sheet-foot">
+      <button type="button" id="item-delete" class="danger-button">Löschen</button>
+      <button type="submit" class="primary-button">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ------------------------------------------------------------ Erster Start -->
+<dialog id="welcome-dialog" class="sheet" aria-label="Willkommen">
+  <div class="sheet-head">
+    <h2>Willkommen</h2>
+  </div>
+  <div class="menu-body">
+    <p class="lead">Dieser Terminplan gehört Ihnen allein. Damit die Begrüßung passt,
+      brauchen wir nur einen Namen – frei wählbar, auch ein Spitzname genügt.</p>
+    <label class="field">
+      <span>Wie möchten Sie angesprochen werden?</span>
+      <input id="welcome-name" placeholder="z. B. Erik" autocomplete="given-name" enterkeyhint="done">
+    </label>
+    <div class="privacy-box">
+      <h3>Ihre Daten bleiben auf diesem Gerät</h3>
+      <p id="welcome-privacy"></p>
+      <p class="privacy-more"><a href="./rechtliches.html#datenschutz">Vollständige Datenschutzerklärung</a></p>
+    </div>
+  </div>
+  <div class="sheet-foot">
+    <button id="welcome-start" class="primary-button">Verstanden – los geht’s</button>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="./vendor/tesseract.min.js"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

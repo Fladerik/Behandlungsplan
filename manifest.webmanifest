@@ -1,0 +1,16 @@
+{
+  "name": "Federsee Terminplan",
+  "short_name": "Terminplan",
+  "description": "Behandlungsplan fotografieren, Termine prüfen und auf dem eigenen Gerät behalten.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6f8",
+  "theme_color": "#871c31",
+  "lang": "de",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

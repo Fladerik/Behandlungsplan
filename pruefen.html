@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Installation prüfen · Federsee Terminplan</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <style>
+    :root { --ok:#2f7a4a; --fehler:#a8323f; --ink:#16232b; --soft:#55636d; --line:#dde4e5; }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:24px 18px 60px; background:#f4f6f5; color:var(--ink);
+      font:16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size:21px; margin:0 0 4px; }
+    .unter { color:var(--soft); font-size:14px; margin:0 0 22px; }
+    .fazit { border-radius:13px; padding:15px 17px; margin-bottom:20px; font-size:15px; border:1px solid var(--line); background:#fff; }
+    .fazit.gut { border-left:4px solid var(--ok); }
+    .fazit.schlecht { border-left:4px solid var(--fehler); }
+    .fazit h2 { font-size:16px; margin:0 0 6px; }
+    .fazit p { margin:6px 0 0; color:var(--soft); font-size:14px; }
+    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+    th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); font-size:14px; }
+    th { background:#eef2f2; font-size:12.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--soft); }
+    tr:last-child td { border-bottom:0; }
+    td.status { width:104px; font-weight:600; white-space:nowrap; }
+    .ja { color:var(--ok); } .nein { color:var(--fehler); }
+    td.datei { font-family:ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size:13px; word-break:break-all; }
+    td.groesse { width:88px; text-align:right; color:var(--soft); font-variant-numeric:tabular-nums; }
+    .hinweis { margin-top:22px; font-size:14px; color:var(--soft); }
+    .hinweis strong { color:var(--ink); }
+    a.zurueck { display:inline-block; margin-top:22px; color:#0d5c63; font-weight:600; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Installation prüfen</h1>
+  <p class="unter">Diese Seite fragt jede benötigte Datei einzeln beim Server ab.</p>
+  <div id="fazit" class="fazit"><h2>Prüfung läuft …</h2></div>
+  <table><thead><tr><th>Status</th><th>Datei</th><th>Größe</th></tr></thead><tbody id="zeilen"></tbody></table>
+  <p class="hinweis"><strong>Fehlt etwas?</strong> Meist wurden die Unterordner <code>vendor</code> und
+    <code>tessdata</code> nicht mit hochgeladen, oder die Übertragung ist mittendrin abgebrochen.
+    Die Ordnerstruktur muss dabei erhalten bleiben.</p>
+  <a class="zurueck" href="./">← Zurück zum Terminplan</a>
+</main>
+
+<script>
+// Ohne diese Dateien startet die App nicht. Die Groessen dienen als grober
+// Abgleich: eine abgebrochene Uebertragung liefert oft eine zu kleine Datei.
+const dateien = [
+  ["./index.html", 5],
+  ["./rechtliches.html", 5],
+  ["./styles.css", 5],
+  ["./app.js", 10],
+  ["./store.js", 5],
+  ["./parser.js", 10],
+  ["./konfiguration.js", 0],
+  ["./ocr.js", 3],
+  ["./deskew.js", 5],
+  ["./ics.js", 1],
+  ["./service-worker.js", 1],
+  ["./manifest.webmanifest", 0],
+  ["./icon.svg", 0],
+  ["./vendor/tesseract.min.js", 40],
+  ["./vendor/worker.min.js", 60],
+  ["./vendor/tesseract-core-lstm.wasm.js", 3000],
+  ["./vendor/tesseract-core-simd-lstm.wasm.js", 3000],
+  ["./vendor/pdf.mjs", 500],
+  ["./vendor/pdf.worker.mjs", 1500],
+  ["./tessdata/deu.traineddata.gz", 6000],
+];
+
+const zeilen = document.getElementById("zeilen");
+const fazit = document.getElementById("fazit");
+let fehlen = 0;
+let zuKlein = 0;
+
+(async () => {
+  for (const [pfad, mindestKB] of dateien) {
+    const zeile = document.createElement("tr");
+    zeile.innerHTML = `<td class="status">…</td><td class="datei">${pfad.replace("./", "")}</td><td class="groesse"></td>`;
+    zeilen.append(zeile);
+
+    let status = "";
+    let groesse = "";
+    try {
+      // Cache umgehen, damit wirklich der Server antwortet.
+      const antwort = await fetch(pfad + "?pruefung=" + Date.now(), { cache: "no-store" });
+      if (!antwort.ok) {
+        status = `<span class="nein">fehlt (${antwort.status})</span>`;
+        fehlen += 1;
+      } else {
+        const bytes = Number(antwort.headers.get("content-length")) || (await antwort.blob()).size;
+        const kb = Math.round(bytes / 1024);
+        groesse = kb >= 1024 ? (kb / 1024).toFixed(1) + " MB" : kb + " kB";
+        if (kb < mindestKB) {
+          status = `<span class="nein">unvollständig</span>`;
+          zuKlein += 1;
+        } else {
+          status = `<span class="ja">vorhanden</span>`;
+        }
+      }
+    } catch (fehler) {
+      status = `<span class="nein">nicht erreichbar</span>`;
+      fehlen += 1;
+    }
+    zeile.children[0].innerHTML = status;
+    zeile.children[2].textContent = groesse;
+  }
+
+  const sicher = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  const probleme = [];
+  if (fehlen) probleme.push(`${fehlen} Datei(en) fehlen auf dem Server`);
+  if (zuKlein) probleme.push(`${zuKlein} Datei(en) sind unvollständig übertragen`);
+  if (!sicher) probleme.push("die Seite läuft nicht über HTTPS – ohne HTTPS bleiben Kamera und Offline-Betrieb gesperrt");
+
+  if (!probleme.length) {
+    fazit.className = "fazit gut";
+    fazit.innerHTML = `<h2>Alles vollständig</h2>
+      <p>Alle benötigten Dateien sind vorhanden und die Seite läuft über eine sichere Verbindung.
+         Der Terminplan sollte einsatzbereit sein.</p>`;
+  } else {
+    fazit.className = "fazit schlecht";
+    fazit.innerHTML = `<h2>Es fehlt noch etwas</h2>
+      <p>${probleme.join(". ")}. Die Zeilen unten zeigen, welche Dateien betroffen sind.</p>`;
+  }
+})();
+</script>
+</body>
+</html>

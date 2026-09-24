@@ -1,0 +1,42 @@
+# Strato / Apache: Auslieferung der Webapp
+Options -Indexes
+DirectoryIndex index.html
+
+AddType application/wasm .wasm
+AddType application/manifest+json .webmanifest
+AddType text/javascript .mjs
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/manifest+json image/svg+xml
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  # Programmdateien kurz halten, damit Aktualisierungen ankommen.
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType text/javascript "access plus 1 hours"
+  ExpiresByType text/css "access plus 1 hours"
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=(), interest-cohort=()"
+  # Alles wird lokal ausgeliefert; es gibt keine Verbindung nach außen.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+</IfModule>
+
+# Hinweis zur Sprachdatei tessdata/deu.traineddata.gz:
+# Sie wird bewusst OHNE "Content-Encoding: gzip" ausgeliefert. Die
+# Texterkennung entpackt sie selbst -- so lief die gesamte Erprobung. Mit dem
+# Header wuerde stattdessen der Browser entpacken; das ist ein anderer Weg,
+# den niemand getestet hat. Der Header bringt hier nichts: die Datei ist
+# bereits gepackt und wird nur ein einziges Mal geladen.
+
+# Der Service Worker darf nie aus einem alten Zwischenspeicher kommen.
+<Files "service-worker.js">
+  <IfModule mod_headers.c>
+    Header set Cache-Control "no-cache, max-age=0"
+  </IfModule>
+</Files>

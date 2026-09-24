@@ -1,0 +1,529 @@
+/**
+ * Datenhaltung des Terminplans.
+ *
+ * Grundgedanke: Der TAG ist die Einheit, nicht der einzelne Termin.
+ * Ein Scan liefert immer genau einen Tagesplan. Wird derselbe Tag erneut
+ * eingelesen, ersetzt der neue Plan den alten komplett (nach Rueckfrage) --
+ * dadurch entfaellt jede Dedup-Heuristik, die neue Termine verschlucken kann.
+ *
+ * Alles liegt im localStorage des Geraets. Es gibt kein Backend und keine
+ * Anmeldung; jede Patientin und jeder Patient hat den eigenen Plan im eigenen
+ * Browser.
+ */
+
+import { ANWENDUNG } from "./konfiguration.js";
+
+const KEY = ANWENDUNG.speicherschluessel;
+const LEGACY_KEYS = ["federsee.plan.v2", "federsee.plan.v1", "federseePlan", "behandlungsplan"];
+
+/**
+ * Kategorien und ihre Kennfarben.
+ *
+ * Die Toene sind gedeckt gewaehlt: Sie muessen sich voneinander unter-
+ * scheiden lassen, ohne dem Markenblau die Aufmerksamkeit zu nehmen. Das
+ * kraeftige Blau bleibt dem naechsten Termin vorbehalten.
+ */
+export const CATEGORIES = [
+  { id: "therapie", label: "Therapie", color: "#0e7490" },
+  { id: "training", label: "Training", color: "#15803d" },
+  { id: "mahlzeit", label: "Mahlzeit", color: "#b45309" },
+  { id: "info", label: "Info/Vortrag", color: "#6d28d9" },
+  { id: "sonstiges", label: "Sonstiges", color: "#64748b" },
+];
+
+const emptyState = () => ({
+  version: 3,
+  profile: { name: "", greetedAt: null, privacyAcceptedAt: null },
+  days: {},
+  lexicon: { title: {}, practitioner: {}, location: {} },
+  settings: { reminder: 15, keepArchiveDays: 400 },
+});
+
+let state = emptyState();
+const listeners = new Set();
+
+/* ---------------------------------------------------------------- Laden */
+
+function readRaw() {
+  try {
+    const current = localStorage.getItem(KEY);
+    if (current) return JSON.parse(current);
+    for (const key of LEGACY_KEYS) {
+      const legacy = localStorage.getItem(key);
+      if (legacy) return migrateLegacy(JSON.parse(legacy));
+    }
+  } catch (error) {
+    console.warn("Gespeicherte Daten konnten nicht gelesen werden.", error);
+  }
+  return null;
+}
+
+/** Aeltere Staende hielten eine flache Terminliste. Diese wird zu Tagen gebuendelt. */
+function migrateLegacy(data) {
+  const events = Array.isArray(data) ? data : data?.events;
+  if (!Array.isArray(events)) return null;
+  const next = emptyState();
+  for (const event of events) {
+    if (!event?.date) continue;
+    const day = (next.days[event.date] ||= { date: event.date, items: [], importedAt: null, source: "uebernommen" });
+    day.items.push(normalizeItem(event));
+  }
+  Object.values(next.days).forEach(sortDay);
+  return next;
+}
+
+/**
+ * Entfernt aus einem gespeicherten Woerterbuch alles, was nicht haette
+ * gelernt werden duerfen.
+ *
+ * Geraete, die schon im Betrieb waren, tragen die Folgen der alten Regel mit
+ * sich herum -- dort stehen Eintraege wie "Behandlung" (16 mal) oder
+ * "Saal Kanzach Abendessen Essensausgabe". Ohne diese Saeuberung bliebe die
+ * Abwaertsspirale auf genau den Geraeten bestehen, die sie am meisten
+ * getroffen hat.
+ */
+function saeubereLexikon(roh) {
+  const sauber = { title: {}, location: {}, practitioner: {} };
+  let entfernt = 0;
+  // Die Orte zuerst: die Titelpruefung braucht sie, um ein abgerissenes
+  // Stueck der Ortsspalte ("Kanzach") als solches zu erkennen.
+  for (const feld of ["location", "practitioner", "title"]) {
+    const ortsWoerter = ortsWoerterAus(sauber.location);
+    for (const [term, anzahl] of Object.entries(roh?.[feld] || {})) {
+      if (istLernwuerdig(feld, String(term).trim(), ortsWoerter)) sauber[feld][term] = anzahl;
+      else entfernt += 1;
+    }
+  }
+  if (entfernt) console.info(`Woerterbuch bereinigt: ${entfernt} unbrauchbare Eintraege entfernt.`);
+  return sauber;
+}
+
+export function load() {
+  const stored = readRaw();
+  state = stored
+    ? { ...emptyState(), ...stored, lexicon: saeubereLexikon(stored.lexicon) }
+    : emptyState();
+  return state;
+}
+
+/* -------------------------------------------------------------- Sichern */
+
+let saveTimer = null;
+export function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persist, 120);
+}
+
+function persist() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+  } catch (error) {
+    console.error("Speichern fehlgeschlagen", error);
+    notify({ type: "storage-error", error });
+  }
+}
+
+/** Sofort schreiben -- fuer pagehide/visibilitychange, damit nichts verloren geht. */
+export function flush() {
+  clearTimeout(saveTimer);
+  persist();
+}
+
+export function subscribe(listener) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function notify(detail) {
+  listeners.forEach((listener) => listener(state, detail));
+}
+
+export function commit(detail = {}) {
+  save();
+  notify(detail);
+}
+
+export const getState = () => state;
+
+/* --------------------------------------------------------- Hilfsfunktionen */
+
+export const todayISO = () => toISO(new Date());
+
+export function toISO(date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+export function addDays(iso, count) {
+  const date = new Date(`${iso}T12:00:00`);
+  date.setDate(date.getDate() + count);
+  return toISO(date);
+}
+
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+export function normalizeItem(raw = {}) {
+  return {
+    id: raw.id || newId(),
+    time: raw.time || "",
+    duration: Number(raw.duration) > 0 ? Number(raw.duration) : 30,
+    title: (raw.title || "").trim(),
+    location: (raw.location || "").trim(),
+    practitioner: (raw.practitioner || "").trim(),
+    category: raw.category || "sonstiges",
+    note: (raw.note || "").trim(),
+    done: Boolean(raw.done),
+  };
+}
+
+const sortDay = (day) => day.items.sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+
+/* ------------------------------------------------------------- Tage lesen */
+
+export function getDay(iso) {
+  return state.days[iso] || null;
+}
+
+export function allDays() {
+  return Object.values(state.days).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Die Tage ab heute -- das ist die Hauptansicht. Vergangenes bleibt im Archiv. */
+export function upcomingDays(count = 5, from = todayISO()) {
+  return allDays().filter((day) => day.date >= from).slice(0, count);
+}
+
+export function pastDays(before = todayISO()) {
+  return allDays().filter((day) => day.date < before).reverse();
+}
+
+/**
+ * Der Termin, der als naechstes ansteht -- oder der gerade laeuft.
+ *
+ * Massgeblich ist das ENDE, nicht der Beginn: Ein Termin, der um 09:00 beginnt
+ * und 45 Minuten dauert, bleibt bis 09:45 der aktuelle. Wer um 09:10 auf das
+ * Telefon schaut, soll sehen, wo er gerade sein muss -- nicht schon den
+ * uebernaechsten Termin.
+ */
+export function nextAppointment(now = new Date()) {
+  const today = toISO(now);
+  const minutenJetzt = now.getHours() * 60 + now.getMinutes();
+
+  for (const day of allDays()) {
+    if (day.date < today) continue;
+    for (const item of day.items) {
+      // Ein Eintrag ohne Uhrzeit oder ohne Bezeichnung taugt nicht als
+      // Wegweiser -- er wuerde im Kasten oben als "Ohne Bezeichnung"
+      // erscheinen und den echten naechsten Termin verdecken.
+      if (item.done || !item.time || !item.title.trim()) continue;
+      if (day.date > today) return { day, item, laeuft: false };
+      const ende = endeInMinuten(item);
+      if (ende > minutenJetzt) {
+        return { day, item, laeuft: beginnInMinuten(item) <= minutenJetzt };
+      }
+    }
+  }
+  return null;
+}
+
+const beginnInMinuten = (item) => {
+  if (!item.time) return 0;
+  const [stunde, minute] = item.time.split(":").map(Number);
+  return stunde * 60 + minute;
+};
+
+const endeInMinuten = (item) => beginnInMinuten(item) + (Number(item.duration) || 30);
+
+/* ------------------------------------------------------------ Tage aendern */
+
+/**
+ * Schreibt einen kompletten Tagesplan.
+ * mode "replace": neuer Plan gewinnt (Standard nach erneutem Scan).
+ * mode "merge":   bestehende Termine bleiben, neue kommen dazu.
+ */
+export function putDay(iso, items, { mode = "replace", source = "Scan" } = {}) {
+  const incoming = items.map(normalizeItem).filter((item) => item.title || item.time);
+  const existing = state.days[iso];
+
+  // Ein vergangener Tag wird nie ueberschrieben. Was gewesen ist, kann sich
+  // nicht mehr aendern -- ein neuer Scan, der einen alten Tag anfasst, hat
+  // sich fast immer im Datum geirrt (auf diesen Plaenen typischerweise am
+  // Anreisedatum im Seitenkopf). Ihn stehen zu lassen schuetzt das Archiv.
+  if (iso < todayISO() && existing) {
+    return { ...existing, uebersprungen: true };
+  }
+
+  if (mode === "merge" && existing) {
+    const known = new Set(existing.items.map(fingerprint));
+    const zusammen = [...existing.items, ...incoming.filter((item) => !known.has(fingerprint(item)))];
+    // Zwei Aufnahmen desselben Tages ergeben oft denselben Termin zweimal:
+    // einmal sauber gelesen, einmal nur als "Behandlung". Steht zur selben
+    // Uhrzeit bereits ein benannter Termin, faellt der Notnagel weg.
+    const benannt = new Set(zusammen.filter((item) => item.title && item.title !== "Behandlung").map((item) => item.time));
+    const merged = zusammen.filter((item) => !(item.title === "Behandlung" && benannt.has(item.time)));
+    state.days[iso] = { ...existing, items: merged, importedAt: Date.now(), source };
+  } else {
+    state.days[iso] = { date: iso, items: incoming, importedAt: Date.now(), source };
+  }
+
+  sortDay(state.days[iso]);
+  learnFrom(state.days[iso].items);
+  commit({ type: "day-changed", date: iso });
+  return state.days[iso];
+}
+
+/**
+ * Erkennungsmerkmal fuer den Ergaenzen-Modus. Verglichen wird eine bereinigte
+ * Form, damit eine Verlesung ("Bewegı.ther.Sch.") nicht als eigener Termin
+ * neben dem korrekt gelesenen steht.
+ */
+const fingerprint = (item) => `${item.time}|${item.title
+  .toLocaleLowerCase("de-DE")
+  .replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss")
+  .replace(/[^a-z0-9]/g, "")}`;
+
+export function removeDay(iso) {
+  delete state.days[iso];
+  commit({ type: "day-removed", date: iso });
+}
+
+export function upsertItem(iso, raw) {
+  const day = (state.days[iso] ||= { date: iso, items: [], importedAt: Date.now(), source: "manuell" });
+  const item = normalizeItem(raw);
+  const index = day.items.findIndex((entry) => entry.id === item.id);
+  if (index >= 0) day.items[index] = item;
+  else day.items.push(item);
+  sortDay(day);
+  learnFrom([item]);
+  commit({ type: "item-changed", date: iso, id: item.id });
+  return item;
+}
+
+export function patchItem(iso, id, patch) {
+  const day = state.days[iso];
+  const item = day?.items.find((entry) => entry.id === id);
+  if (!item) return null;
+  Object.assign(item, patch);
+  sortDay(day);
+  commit({ type: "item-changed", date: iso, id });
+  return item;
+}
+
+export function removeItem(iso, id) {
+  const day = state.days[iso];
+  if (!day) return;
+  day.items = day.items.filter((entry) => entry.id !== id);
+  if (!day.items.length) delete state.days[iso];
+  commit({ type: "item-removed", date: iso, id });
+}
+
+export function setSetting(key, value) {
+  state.settings[key] = value;
+  commit({ type: "settings" });
+}
+
+export function setProfile(patch) {
+  Object.assign(state.profile, patch);
+  commit({ type: "profile" });
+}
+
+/* ---------------------------------------------------------------- Lexikon */
+
+/**
+ * Behandlungsplaene wiederholen dieselben Anwendungen, Raeume und Namen ueber
+ * Wochen hinweg. Jeder bestaetigte Eintrag wird gezaehlt; der Parser korrigiert
+ * damit spaeter OCR-Verlesungen ("Muler" -> "Müller").
+ */
+function learnFrom(items) {
+  for (const item of items) {
+    countTerm("title", item.title);
+    countTerm("practitioner", item.practitioner);
+    countTerm("location", item.location);
+  }
+}
+
+/** Vergleichsform: Gross-/Kleinschreibung, Umlaute und Satzzeichen fallen weg. */
+const fold = (value) => value.toLocaleLowerCase("de-DE")
+  .replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss")
+  .replace(/[^a-z0-9]/g, "");
+
+/**
+ * Zeichen, die in deutschen Klinikplaenen nicht vorkommen, sind ein sicheres
+ * Zeichen fuer eine Verlesung ("Bewegı.ther.Sch." statt "Beweg.ther.Sch.").
+ */
+export const oddCharacters = (value) => (String(value).match(/[^A-Za-zÄÖÜäöüß0-9 .,:;/()+&-]/g) || []).length;
+
+/**
+ * Pro Begriff wird nur EINE Schreibweise gefuehrt. Sonst sammelt das
+ * Woerterbuch Verlesungsvarianten an und normalisiert spaeter womoeglich
+ * auf die falsche davon. Die sauberere Schreibweise setzt sich durch.
+ */
+/** Der Notnagel der Erkennung und reine Spaltennamen -- nie ein Begriff. */
+const NIE_LERNEN = /^(behandlung|termin|anwendung|heilmittel|behandler|haus|saal|ort|zeit|uhr)$/i;
+
+/** Woraus eine Ortsangabe auf diesen Plaenen beginnt. */
+const ORT_ANFANG = /^(saal|haus|has|eg|og|ug|\d[.,]?\s*[o0]g|raum|zimmer|therapeutikum|kurzentrum|treff|patientenzimmer|hallenbad|mtz|kg-|wartebereich|fernsehger|bewegungsbad|sporthalle|vortragsr)/i;
+
+/** Was in der Behandler-Spalte steht, ohne eine Person zu sein. */
+const BEHANDLER_WORT = /(essensausgab|videoschulung|selbst[st]?[äa]ndig)/i;
+
+/** Anrede vor einem Namen -- Umlaute in der Wortgrenze mitgedacht. */
+const ANREDE = /(^|[^\wÄÖÜäöüß])(frau|herr|dr|prof)\.?([^\wÄÖÜäöüß]|$)/i;
+
+/**
+ * Taugt dieser Wert als Woerterbucheintrag?
+ *
+ * Das Woerterbuch korrigiert kuenftige Scans. Ein falsch gelesener Wert darin
+ * richtet deshalb mehr Schaden an, als er Nutzen bringt: er wird zum Vorbild,
+ * an dem sich die naechste Erkennung ausrichtet, und jeder Scan faellt
+ * schlechter aus als der davor. Genau das war auf einem Geraet im Einsatz zu
+ * sehen -- dort stand "Behandlung" sechzehnmal als gelernter Anwendungsname.
+ *
+ * Gelernt wird darum nur, was wie ein sauber gelesener Begriff seines Feldes
+ * aussieht. Im Zweifel nicht lernen: der Grundbestand traegt auch allein.
+ */
+function istLernwuerdig(field, term, ortsWoerter = null) {
+  if (term.length < 3 || term.length > 44) return false;
+  if (NIE_LERNEN.test(term)) return false;
+  // Zeichen, die auf deutschen Klinikplaenen nicht vorkommen, sind ein
+  // sicheres Zeichen fuer eine Verlesung.
+  if (oddCharacters(term)) return false;
+  // Abgeschnitten: ein einzelner Grossbuchstabe am Ende, oder ein Satzzeichen.
+  if (/\s[A-ZÄÖÜ]$/.test(term) || /[:;,]$/.test(term)) return false;
+  // Grossbuchstabe mitten im Wort: zwei Zellen sind ineinandergelaufen
+  // ("HelparmÜben").
+  if (/[a-zäöüß][A-ZÄÖÜ]/.test(term)) return false;
+
+  const woerter = term.split(/\s+/);
+
+  if (field === "practitioner") {
+    // Eine Person traegt eine Anrede, sonst ist es ein Wort der Spalte selbst.
+    if (!ANREDE.test(term) && !BEHANDLER_WORT.test(term)) return false;
+    // "Ergo einzel Frau M. Hiller" ist Anwendung und Behandler in einem.
+    return woerter.length <= 3;
+  }
+
+  if (field === "location") {
+    // Orte sind laenger: "Therapeutikum, 2. OG Raum 2" sind fuenf Woerter.
+    if (woerter.length > 5) return false;
+    // Eine Anrede gehoert nie in eine Ortsangabe.
+    if (ANREDE.test(term)) return false;
+    // Deutsche Hauptwoerter beginnen gross. Ein kleingeschriebenes langes
+    // Wort ist eine Verlesung oder eine Nachbesserung von Hand
+    // ("Saal kranzach").
+    return !woerter.some((wort) => wort.length >= 4 && /^[a-zäöüß]/.test(wort));
+  }
+
+  // Anwendungen sind kurz und tragen weder Ort noch Person noch Ziffer vorn.
+  if (woerter.length > 4) return false;
+  if (/^\d/.test(term)) return false;
+  if (ORT_ANFANG.test(term)) return false;
+  if (ANREDE.test(term) || BEHANDLER_WORT.test(term)) return false;
+  // Ein einzelnes Wort, das schon als Teil einer Ortsangabe bekannt ist, ist
+  // ein abgerissenes Stueck der Ortsspalte ("Kanzach"), keine Anwendung.
+  if (woerter.length === 1 && (ortsWoerter ?? ortsWoerterAus(state.lexicon?.location)).has(fold(term))) return false;
+  return true;
+}
+
+/** Alle Einzelwoerter der bekannten Ortsangaben -- fuer die Titelpruefung. */
+function ortsWoerterAus(bucket) {
+  const menge = new Set();
+  for (const eintrag of Object.keys(bucket || {})) {
+    for (const teil of String(eintrag).split(/[\s,]+/)) {
+      const gefaltet = fold(teil);
+      if (gefaltet.length >= 3) menge.add(gefaltet);
+    }
+  }
+  return menge;
+}
+
+function countTerm(field, value) {
+  const term = (value || "").trim();
+  if (!istLernwuerdig(field, term)) return;
+  const bucket = (state.lexicon[field] ||= {});
+  const key = fold(term);
+  const known = Object.keys(bucket).find((entry) => fold(entry) === key);
+
+  if (!known) { bucket[term] = 1; return; }
+  if (known === term) { bucket[term] += 1; return; }
+
+  const count = bucket[known] + 1;
+  if (oddCharacters(term) < oddCharacters(known)) {
+    delete bucket[known];
+    bucket[term] = count;
+  } else {
+    bucket[known] = count;
+  }
+}
+
+export const getLexicon = () => state.lexicon;
+
+/* ------------------------------------------------------- Sichern / Umziehen */
+
+export function exportBackup() {
+  return JSON.stringify({ ...state, exportedAt: new Date().toISOString() }, null, 2);
+}
+
+/**
+ * Prueft einen eingelesenen Tag und gibt ihn in gueltiger Form zurueck --
+ * oder null, wenn er unbrauchbar ist.
+ *
+ * Eine Sicherungsdatei kann beschaedigt sein oder aus einer anderen Anwendung
+ * stammen. Frueher genuegte das blosse Vorhandensein eines Feldes "days";
+ * eine Datei wie {"days":"kaputt"} wurde uebernommen und machte den Plan
+ * unbrauchbar. Geprueft wird deshalb die Form, nicht nur der Name.
+ */
+function pruefeTag(iso, roh) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  if (!roh || typeof roh !== "object" || !Array.isArray(roh.items)) return null;
+
+  const items = roh.items
+    .filter((item) => item && typeof item === "object")
+    .map(normalizeItem)
+    .filter((item) => item.title || item.time);
+
+  return items.length ? { date: iso, items, importedAt: roh.importedAt || Date.now(), source: roh.source || "Sicherung" } : null;
+}
+
+export function importBackup(json, { mode = "replace" } = {}) {
+  const data = JSON.parse(json);
+  if (!data || typeof data !== "object" || !data.days || typeof data.days !== "object" || Array.isArray(data.days)) {
+    throw new Error("Die Datei enthaelt keinen Terminplan.");
+  }
+
+  // Erst vollstaendig pruefen, dann uebernehmen: ein halb eingelesener
+  // Bestand waere schlimmer als ein abgelehnter.
+  const geprueft = {};
+  let verworfen = 0;
+  for (const [iso, roh] of Object.entries(data.days)) {
+    const tag = pruefeTag(iso, roh);
+    if (tag) geprueft[iso] = tag;
+    else verworfen += 1;
+  }
+
+  if (!Object.keys(geprueft).length) {
+    throw new Error("In der Datei stehen keine lesbaren Termine.");
+  }
+
+  if (mode === "merge") {
+    for (const [iso, tag] of Object.entries(geprueft)) {
+      if (!state.days[iso]) state.days[iso] = tag;
+    }
+  } else {
+    state = {
+      ...emptyState(),
+      days: geprueft,
+      profile: { ...emptyState().profile, ...(typeof data.profile === "object" ? data.profile : {}) },
+      settings: { ...emptyState().settings, ...(typeof data.settings === "object" ? data.settings : {}) },
+      lexicon: { ...emptyState().lexicon, ...(typeof data.lexicon === "object" ? data.lexicon : {}) },
+    };
+  }
+
+  commit({ type: "restored" });
+  return { tage: Object.keys(geprueft).length, verworfen };
+}
+
+export function clearAll() {
+  state = emptyState();
+  commit({ type: "cleared" });
+}
