@@ -16,8 +16,10 @@ name: Als GitHub Pages veröffentlichen
 on:
   push:
     branches:
+      # Nur main. Ein Arbeitszweig hat hier nichts verloren: der Ablauf
+      # schiebt mit --force auf gh-pages, ein Versehen wuerde also die
+      # veroeffentlichte App durch einen halbfertigen Stand ersetzen.
       - main
-      - claude/**
     paths-ignore:
       - "README.md"
       - "werkzeuge/**"
@@ -53,6 +55,25 @@ jobs:
           find _seite -type f | wc -l
           du -sh _seite
 
+      - name: Ursprüngliche blaue Ausgabe mitliefern
+        run: |
+          # Unter /behandlungsplan_official bleibt die Fassung erreichbar, in
+          # der die App im Haus vorgestellt wurde. Es ist dieselbe App, nur
+          # mit den alten Markenfarben -- kein zweiter Programmstand, der
+          # gepflegt werden müsste. Kopiert wird die fertige Seite, danach
+          # gewinnt die angehängte Farbdatei über den Block in styles.css.
+          ziel=_seite/behandlungsplan_official
+          mkdir -p "$ziel"
+          rsync -a --exclude 'behandlungsplan_official' _seite/ "$ziel/"
+          cat farben/blau.css >> "$ziel/styles.css"
+          # Farbe der Statusleiste am Telefon -- steht außerhalb von styles.css.
+          sed -i 's/#871c31/#0e3a6b/g' "$ziel/index.html" "$ziel/rechtliches.html" "$ziel/manifest.webmanifest"
+          sed -i 's/stroke="#5e1229"/stroke="#0a2547"/' "$ziel/index.html"
+          # Der QR-Code führt bewusst weiter auf die Hauptadresse: wer die App
+          # weitergibt, soll die aktuelle bekommen, nicht die aufbewahrte.
+          echo "Zweitfassung unter /behandlungsplan_official:"
+          du -sh "$ziel"
+
       - name: Vollständigkeit prüfen
         run: |
           # Fehlt die Texterkennung, startet die App beim Patienten nicht.
@@ -65,7 +86,17 @@ jobs:
               exit 1
             fi
           done
-          echo "Alle Pflichtdateien vorhanden."
+          for pflicht in index.html styles.css tessdata/deu.traineddata.gz; do
+            if [ ! -s "_seite/behandlungsplan_official/$pflicht" ]; then
+              echo "::error::behandlungsplan_official/$pflicht fehlt -- Veröffentlichung abgebrochen."
+              exit 1
+            fi
+          done
+          if ! grep -q '0e3a6b' _seite/behandlungsplan_official/styles.css; then
+            echo "::error::Die blaue Ausgabe trägt nicht die alten Farben -- Veröffentlichung abgebrochen."
+            exit 1
+          fi
+          echo "Alle Pflichtdateien vorhanden, Zweitfassung eingefärbt."
 
       - name: Auf den Zweig gh-pages schieben
         env:

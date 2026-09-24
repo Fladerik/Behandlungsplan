@@ -1,0 +1,30 @@
+/* Die urspruengliche blaue Ausgabe -- aufbewahrt, nicht abgeschaltet.
+ *
+ * Diese Datei wird beim Veroeffentlichen an die Kopie unter
+ * /behandlungsplan_official angehaengt und ueberschreibt dort die
+ * Markenfarben. Sie steht spaeter in der Datei als der Block in styles.css
+ * und gewinnt deshalb -- ohne dass an styles.css selbst etwas zu aendern
+ * waere.
+ *
+ * Warum ueberhaupt aufbewahren: Unter der blauen Fassung ist die App im
+ * Haus vorgestellt und getestet worden. Eine Farbentscheidung laesst sich
+ * zurueckdrehen, eine verlorene Fassung nicht. Solange beide Adressen
+ * erreichbar sind, ist der Vergleich eine Frage von zwei Klicks.
+ *
+ * Beide Fassungen liegen auf derselben Adresse (fladerik.github.io) und
+ * teilen sich damit den Speicher des Browsers: die gespeicherten Termine
+ * sind in beiden dieselben. Es sind zwei Anstriche desselben Hauses, nicht
+ * zwei Haeuser.
+ */
+:root {
+  --marke-900: #0a2547;
+  --marke-800: #0e3a6b;
+  --marke-700: #135baf;
+  --marke-600: #1b7fe8;
+  --marke-100: #e8f1fd;
+
+  --termin-von: #1b7fe8;
+  --termin-bis: #0e4fa3;
+
+  --danger: #a8323f;
+}

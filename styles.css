@@ -6,25 +6,34 @@
   /* ------------------------------------------------------------------
      Markenfarbe.
 
-     Alles Blau der App leitet sich aus diesen fuenf Werten ab. Um auf den
-     exakten Fugo-Blauton umzustellen, genuegt es, sie hier zu ersetzen --
-     an keiner anderen Stelle steht eine Blauangabe fest im Code.
+     Alle Markenfarbe der App leitet sich aus diesen fuenf Werten ab. Ein
+     Wechsel des Farbschemas geschieht genau hier -- an keiner anderen
+     Stelle steht ein Markenton fest im Code.
+
+     Die Reihe laeuft von Pastellrosa zum vorgegebenen Rot und wird nach
+     unten hin nicht braun, sondern beerenfarben: der Farbton wandert von
+     345 Grad (Rosa) ueber 3 Grad (Vorgabe-Rot) zurueck auf 342 Grad
+     (Dunkelbeere). Dadurch bleibt die Reihe eine Familie, statt in zwei
+     Haelften zu zerfallen.
+
+     Weisse Schrift auf 700 und 600 erreicht 6,6 bzw. 5,3 zu 1 und damit
+     die Stufe AA; der fruehere blaue 600er lag mit 4,0 darunter.
      ------------------------------------------------------------------ */
-  --marke-900: #0a2547;   /* Kopfbereich, dunkelster Ton */
-  --marke-800: #0e3a6b;   /* Kopfbereich, Grundton */
-  --marke-700: #135baf;   /* Flaechen, Hauptknopf */
-  --marke-600: #1b7fe8;   /* FUGO-Blau: Akzente, Linien, aktive Zustaende */
-  --marke-100: #e8f1fd;   /* helle Flaechen */
+  --marke-900: #5e1229;   /* Dunkelbeere: Kopfbereich, dunkelster Ton */
+  --marke-800: #871c31;   /* Beere: Kopfbereich, Grundton */
+  --marke-700: #b02730;   /* Kirschrot: Flaechen, Hauptknopf */
+  --marke-600: #c93229;   /* Vorgabe-Rot aus dem Signet: Akzente, aktive Zustaende */
+  --marke-100: #fce4ea;   /* Pastellrosa: helle Flaechen */
 
   /* TaM² tritt auf der Fugo-Seite in Orange auf. Die Farbe bleibt dem
      Verweis auf diese zweite Anwendung vorbehalten und wird sonst nirgends
      verwendet -- sonst verliert sie ihre Kennzeichnung. */
   --tam-orange: #ff6b1a;
 
-  /* Der Kasten mit dem naechsten Termin traegt das FUGO-Blau in voller
+  /* Der Kasten mit dem naechsten Termin traegt den Markenton in voller
      Saettigung und hebt sich damit vom dunkleren Kopfbereich ab. */
-  --termin-von: #1b7fe8;
-  --termin-bis: #0e4fa3;
+  --termin-von: #c93229;
+  --termin-bis: #921c2f;
 
   --ink: #16232b;
   --ink-soft: #55636d;
@@ -33,7 +42,7 @@
   --card: #ffffff;
   --line: #dbe2ea;
   --accent: #b4531f;
-  --danger: #a8323f;
+  --danger: #952918;
   --ok: #2f7a4a;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(16, 32, 55, .06), 0 8px 24px rgba(16, 32, 55, .07);
