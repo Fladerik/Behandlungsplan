@@ -10,293 +10,168 @@
   @font-face { font-family: "Barlow"; font-weight: 600; src: url("fonts/BarlowCondensed-SemiBold.ttf"); }
   @font-face { font-family: "Barlow"; font-weight: 800; src: url("fonts/BarlowCondensed-ExtraBold.ttf"); }
 
-  :root {
-    --neon: #2bff88;
-    --neon-2: #00d26a;
-    --deep: #01110a;
-    --ice: #e9fff4;
-    --gold: #ffd34d;
-  }
-  @page { size: 297mm 420mm; margin: 0; }
+  :root { --neon: #2bff88; --red: #ff3b2f; --gold: #ffd34d; }
   html, body { margin: 0; padding: 0; background: #000; }
   /* A3 in CSS-Pixeln (96 dpi) */
   .poster {
-    position: relative; overflow: hidden;
-    width: 1123px; height: 1587px;
-    background:
-      radial-gradient(ellipse 70% 40% at 50% 46%, rgba(20,160,90,.55), transparent 70%),
-      radial-gradient(ellipse 120% 60% at 50% 0%, #06321d 0%, transparent 70%),
-      linear-gradient(180deg, #010a06 0%, #03190f 45%, #021208 70%, #000503 100%);
+    position: relative; overflow: hidden; width: 1123px; height: 1587px;
+    background: linear-gradient(180deg, #000604 0%, #02130b 40%, #010b06 70%, #000 100%);
     font-family: "Barlow", sans-serif; color: #fff;
   }
-  .layer { position: absolute; inset: 0; }
-  svg.layer { width: 100%; height: 100%; }
+  .layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .abs { position: absolute; }
 
-  /* ---------- Typo ---------- */
-  .top {
-    position: absolute; top: 46px; left: 0; right: 0;
-    display: flex; justify-content: center; align-items: center; gap: 22px;
-    font-weight: 600; font-size: 25px; letter-spacing: .42em; text-transform: uppercase;
-    color: rgba(230,255,240,.9);
+  .chrome {
+    background: linear-gradient(180deg, #ffffff 0%, #effff6 38%, #93ad9f 48%, #22342b 51%, #c9eedb 57%, #ffffff 78%, #b6dcc7 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .top .bar { width: 120px; height: 2px; background: linear-gradient(90deg, transparent, var(--neon)); }
-  .top .bar.r { transform: scaleX(-1); }
-  .top b { color: var(--neon); font-weight: 800; }
+
+  .top {
+    top: 40px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 22px;
+    font-weight: 600; font-size: 24px; letter-spacing: .42em; text-transform: uppercase; color: rgba(230,255,240,.92);
+  }
+  .top .bar { width: 130px; height: 2px; background: linear-gradient(90deg, transparent, var(--neon)); }
+  .top .bar.r { background: linear-gradient(270deg, transparent, var(--red)); }
 
   .headline {
-    position: absolute; top: 92px; left: 0; right: 0; text-align: center;
-    font-family: "Bebas"; line-height: .8; transform: skewX(-9deg);
-  }
-  .headline .w {
-    display: block;
-    background: linear-gradient(176deg, #ffffff 0%, #ffffff 38%, #b9ffd8 52%, #ffffff 60%, #7dffb9 100%);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 0 18px rgba(43,255,136,.65)) drop-shadow(0 6px 0 rgba(0,60,30,.9));
-  }
-  .headline .save { font-size: 330px; letter-spacing: .02em; }
-  .headline .the  {
-    display: flex; align-items: center; justify-content: center; gap: 26px;
-    font-family: "Barlow"; font-weight: 800; font-size: 46px; letter-spacing: .6em;
-    padding-left: .6em; color: var(--neon); margin: 6px 0 4px; text-shadow: 0 0 14px rgba(43,255,136,.8);
-  }
-  .headline .the::before, .headline .the::after {
-    content: ""; width: 210px; height: 4px; border-radius: 2px;
-    background: linear-gradient(90deg, transparent, var(--neon));
-  }
-  .headline .the::after { transform: scaleX(-1); }
-  .headline .date-w { font-size: 330px; letter-spacing: .02em; }
-
-  .date {
-    position: absolute; top: 912px; left: 0; right: 0; text-align: center;
-  }
-  .date .day {
-    font-weight: 800; font-size: 34px; letter-spacing: .55em; color: var(--neon);
-    text-shadow: 0 0 12px rgba(43,255,136,.7); padding-left: .55em;
-  }
-  .date .big {
-    font-family: "Anton"; font-size: 178px; line-height: 1; margin-top: 2px;
-    letter-spacing: .01em; color: #fff;
-    text-shadow: 0 0 30px rgba(43,255,136,.55), 0 0 2px #fff;
-    transform: skewX(-6deg);
-  }
-  .date .big .dot { color: var(--neon); }
-  .date .time {
-    display: inline-flex; align-items: center; gap: 22px; margin-top: 10px;
-    font-weight: 800; font-size: 46px; letter-spacing: .12em;
-  }
-  .date .time .pill {
-    background: var(--neon); color: #01200f; padding: 2px 22px 0; border-radius: 8px;
-    box-shadow: 0 0 26px rgba(43,255,136,.8); transform: skewX(-10deg);
+    top: 74px; left: 0; right: 0; text-align: center;
+    font-family: "Bebas"; font-size: 188px; line-height: 1; letter-spacing: .015em;
+    transform: skewX(-8deg);
+    filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 26px rgba(43,255,136,.75)) drop-shadow(0 7px 0 #00321a);
   }
 
-  .match {
-    position: absolute; top: 1192px; left: 70px; right: 70px;
-    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px;
-  }
-  .team { text-transform: uppercase; line-height: .95; }
-  .team.home { text-align: right; }
-  .team .sub { font-weight: 600; font-size: 28px; letter-spacing: .3em; color: rgba(220,255,235,.75); }
-  .team .name { font-family: "Bebas"; font-size: 96px; letter-spacing: .03em; }
-  .team.home .name {
-    color: var(--neon); text-shadow: 0 0 22px rgba(43,255,136,.65);
-  }
+  .steelers { left: 6px; top: 318px; width: 560px; transform: rotate(-5deg);
+    filter: drop-shadow(0 18px 24px rgba(0,0,0,.6)); }
+  .landshut { left: 700px; top: 372px; width: 352px; transform: rotate(4deg);
+    filter: drop-shadow(0 0 3px #fff2b0) drop-shadow(0 0 34px rgba(255,59,47,.85)) drop-shadow(0 18px 24px rgba(0,0,0,.7)); }
   .vs {
-    width: 112px; height: 112px; border-radius: 50%;
-    display: grid; place-items: center;
-    font-family: "Anton"; font-size: 50px; color: #0a0a0a;
-    background: radial-gradient(circle at 35% 30%, #fff6c9, var(--gold) 45%, #c28d00 100%);
-    box-shadow: 0 0 0 6px rgba(0,0,0,.6), 0 0 0 9px var(--gold), 0 0 40px rgba(255,211,77,.6);
-    transform: rotate(-8deg);
+    left: 561px; top: 548px; transform: translate(-50%, -50%) rotate(-8deg);
+    font-family: "Anton"; font-size: 132px; line-height: 1; letter-spacing: -.02em;
+    background: linear-gradient(180deg, #fffbe6 0%, #ffe27a 42%, #b77d00 50%, #ffd34d 60%, #fff3c4 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 30px rgba(255,211,77,.9)) drop-shadow(0 6px 0 #3a2600);
   }
 
-  .ticket {
-    position: absolute; top: 1350px; left: 50%; transform: translateX(-50%);
-    width: 860px; height: 120px; display: flex;
-    filter: drop-shadow(0 0 22px rgba(43,255,136,.45));
+  .date { top: 800px; left: 0; right: 0; text-align: center; }
+  .date .big {
+    font-family: "Anton"; font-size: 196px; line-height: 1.12; letter-spacing: .005em;
+    transform: skewX(-7deg);
+    filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 30px rgba(43,255,136,.65)) drop-shadow(0 8px 0 #00321a);
   }
-  .ticket .main, .ticket .stub {
-    position: relative; height: 100%;
-    background: linear-gradient(180deg, rgba(10,60,34,.92), rgba(3,30,16,.95));
-    border: 2px solid var(--neon);
-  }
-  .ticket .main {
-    flex: 1; border-right: none; border-radius: 14px 0 0 14px;
-    display: grid; grid-template-columns: repeat(3, 1fr); align-items: center;
-  }
-  .ticket .stub {
-    width: 230px; border-left: 3px dashed rgba(43,255,136,.8); border-radius: 0 14px 14px 0;
-    display: flex; flex-direction: column; justify-content: center; align-items: center;
-    text-transform: uppercase;
-  }
-  .ticket .main::before, .ticket .main::after {
-    content: ""; position: absolute; right: -15px; width: 28px; height: 28px; border-radius: 50%;
-    background: #020f08; border: 2px solid var(--neon); z-index: 2;
-  }
-  .ticket .main::before { top: -16px; clip-path: inset(50% 0 0 0); }
-  .ticket .main::after  { bottom: -16px; clip-path: inset(0 0 50% 0); }
+  .date .row { display: inline-flex; align-items: center; gap: 22px; margin-top: 2px;
+    font-weight: 800; font-size: 48px; letter-spacing: .14em; }
+  .pill { background: var(--neon); color: #01200f; padding: 3px 24px 0; border-radius: 8px;
+    box-shadow: 0 0 30px rgba(43,255,136,.85); transform: skewX(-10deg); letter-spacing: .08em; }
+
+  .match { top: 1150px; left: 0; right: 0; text-align: center; font-family: "Bebas"; font-size: 66px; letter-spacing: .05em; }
+  .match .h { color: var(--neon); text-shadow: 0 0 22px rgba(43,255,136,.7); }
+  .match .g { color: #ff5a4a; text-shadow: 0 0 22px rgba(255,59,47,.7); }
+  .match .v { font-family: "Barlow"; font-weight: 600; font-size: 34px; letter-spacing: .2em; color: rgba(255,255,255,.75); margin: 0 18px; position: relative; top: -10px; }
+
+  .ticket { top: 1252px; left: 50%; transform: translateX(-50%); width: 880px; height: 122px; display: flex;
+    filter: drop-shadow(0 0 22px rgba(43,255,136,.45)); }
+  .ticket .main, .ticket .stub { position: relative; height: 100%;
+    background: linear-gradient(180deg, rgba(10,60,34,.94), rgba(3,30,16,.97)); border: 2px solid var(--neon); }
+  .ticket .main { flex: 1; border-right: none; border-radius: 14px 0 0 14px;
+    display: grid; grid-template-columns: repeat(3, 1fr); align-items: center; }
+  .ticket .stub { width: 236px; border-left: 3px dashed rgba(43,255,136,.8); border-radius: 0 14px 14px 0;
+    display: flex; flex-direction: column; justify-content: center; align-items: center; text-transform: uppercase; }
   .field { text-align: center; border-right: 1px solid rgba(43,255,136,.35); }
   .field:last-child { border-right: none; }
   .field .k { font-weight: 600; font-size: 20px; letter-spacing: .35em; color: rgba(200,255,225,.75); text-transform: uppercase; }
   .field .v { font-family: "Anton"; font-size: 58px; line-height: 1.05; }
   .field .v.small { font-family: "Bebas"; font-size: 52px; letter-spacing: .03em; color: var(--neon); }
-  .stub .s1 { font-weight: 800; font-size: 26px; letter-spacing: .14em; color: var(--gold); }
+  .stub .s1 { font-weight: 800; font-size: 27px; letter-spacing: .14em; color: var(--gold); text-shadow: 0 0 14px rgba(255,211,77,.6); }
   .stub .s2 { font-weight: 600; font-size: 19px; letter-spacing: .18em; color: rgba(220,255,235,.85); margin-top: 2px; }
 
-  .footer {
-    position: absolute; bottom: 34px; left: 0; right: 0; text-align: center; text-transform: uppercase;
-  }
-  .footer .arena { font-weight: 800; font-size: 34px; letter-spacing: .3em; padding-left: .3em; }
+  .footer { bottom: 40px; left: 0; right: 0; text-align: center; text-transform: uppercase; }
+  .footer .arena { font-weight: 800; font-size: 36px; letter-spacing: .3em; padding-left: .3em; }
   .footer .addr { font-weight: 500; font-size: 20px; letter-spacing: .22em; color: rgba(210,255,230,.7); margin-top: 4px; }
-  .footer .tag {
-    position: absolute; right: 44px; bottom: 6px; font-family: "Bebas"; font-size: 34px; letter-spacing: .06em;
-    color: var(--neon); transform: rotate(-90deg); transform-origin: right bottom;
-  }
-  .side {
-    position: absolute; left: 34px; top: 50%; transform: translateY(-50%) rotate(180deg);
-    writing-mode: vertical-rl; font-weight: 600; font-size: 18px; letter-spacing: .6em;
-    color: rgba(43,255,136,.55); text-transform: uppercase;
-  }
-  .side.r { left: auto; right: 34px; transform: translateY(-50%); }
+  .footer .go { font-family: "Bebas"; font-size: 40px; letter-spacing: .12em; color: var(--neon); text-shadow: 0 0 18px rgba(43,255,136,.8); margin-bottom: 6px; }
 </style>
 </head>
 <body>
 <div class="poster" id="poster">
 
-  <!-- Hintergrund: Lichtstrahlen, Flutlichter, Eisfläche, Speed-Lines, Puck, Partikel -->
-  <svg class="layer" viewBox="0 0 1123 1587" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <svg class="layer" viewBox="0 0 1123 1587" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#eafff3" stop-opacity=".55"/>
-        <stop offset=".35" stop-color="#5dffa6" stop-opacity=".18"/>
-        <stop offset="1" stop-color="#2bff88" stop-opacity="0"/>
-      </linearGradient>
-      <radialGradient id="lamp">
-        <stop offset="0" stop-color="#ffffff"/>
-        <stop offset=".25" stop-color="#e9ffb8"/>
-        <stop offset=".6" stop-color="#6dff9e" stop-opacity=".35"/>
-        <stop offset="1" stop-color="#2bff88" stop-opacity="0"/>
-      </radialGradient>
-      <linearGradient id="ice" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#0b4a2b" stop-opacity=".0"/>
-        <stop offset=".15" stop-color="#0c5a33" stop-opacity=".55"/>
-        <stop offset=".6" stop-color="#042414" stop-opacity=".9"/>
-        <stop offset="1" stop-color="#000" stop-opacity="1"/>
-      </linearGradient>
-      <radialGradient id="iceShine" cx=".5" cy=".2" r=".7">
-        <stop offset="0" stop-color="#9dffc8" stop-opacity=".5"/>
-        <stop offset="1" stop-color="#2bff88" stop-opacity="0"/>
-      </radialGradient>
-      <radialGradient id="burst" cx=".5" cy=".5" r=".5">
-        <stop offset="0" stop-color="#ffffff" stop-opacity=".95"/>
-        <stop offset=".18" stop-color="#b8ffd6" stop-opacity=".7"/>
-        <stop offset=".5" stop-color="#2bff88" stop-opacity=".22"/>
-        <stop offset="1" stop-color="#2bff88" stop-opacity="0"/>
-      </radialGradient>
-      <linearGradient id="puckSide" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#050505"/>
-        <stop offset=".45" stop-color="#2a2f2c"/>
-        <stop offset=".6" stop-color="#121413"/>
-        <stop offset="1" stop-color="#000"/>
-      </linearGradient>
-      <linearGradient id="puckTop" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#3a403c"/>
-        <stop offset=".5" stop-color="#151816"/>
-        <stop offset="1" stop-color="#050605"/>
-      </linearGradient>
-      <linearGradient id="trail" x1="1" y1="0" x2="0" y2="0">
-        <stop offset="0" stop-color="#2bff88" stop-opacity="0"/>
-        <stop offset=".7" stop-color="#7dffb9" stop-opacity=".55"/>
-        <stop offset="1" stop-color="#ffffff" stop-opacity=".95"/>
-      </linearGradient>
-      <filter id="blur6"><feGaussianBlur stdDeviation="6"/></filter>
-      <filter id="blur14"><feGaussianBlur stdDeviation="14"/></filter>
-      <filter id="blur30"><feGaussianBlur stdDeviation="30"/></filter>
-      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="3" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      <radialGradient id="gGreen"><stop offset="0" stop-color="#1fe57a" stop-opacity=".75"/><stop offset=".45" stop-color="#0b8f47" stop-opacity=".35"/><stop offset="1" stop-color="#03301a" stop-opacity="0"/></radialGradient>
+      <radialGradient id="gRed"><stop offset="0" stop-color="#ff3b2f" stop-opacity=".7"/><stop offset=".45" stop-color="#a3140c" stop-opacity=".32"/><stop offset="1" stop-color="#3a0503" stop-opacity="0"/></radialGradient>
+      <radialGradient id="gCore"><stop offset="0" stop-color="#ffffff"/><stop offset=".12" stop-color="#fff7cf" stop-opacity=".9"/><stop offset=".4" stop-color="#ffd34d" stop-opacity=".3"/><stop offset="1" stop-color="#ffd34d" stop-opacity="0"/></radialGradient>
+      <linearGradient id="beamG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eafff3" stop-opacity=".5"/><stop offset=".4" stop-color="#5dffa6" stop-opacity=".14"/><stop offset="1" stop-color="#2bff88" stop-opacity="0"/></linearGradient>
+      <linearGradient id="beamR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0ec" stop-opacity=".45"/><stop offset=".4" stop-color="#ff6a5a" stop-opacity=".13"/><stop offset="1" stop-color="#ff3b2f" stop-opacity="0"/></linearGradient>
+      <radialGradient id="lampG"><stop offset="0" stop-color="#fff"/><stop offset=".25" stop-color="#eaffc8"/><stop offset=".6" stop-color="#6dff9e" stop-opacity=".35"/><stop offset="1" stop-color="#2bff88" stop-opacity="0"/></radialGradient>
+      <radialGradient id="lampR"><stop offset="0" stop-color="#fff"/><stop offset=".25" stop-color="#ffe0d8"/><stop offset=".6" stop-color="#ff6a5a" stop-opacity=".35"/><stop offset="1" stop-color="#ff3b2f" stop-opacity="0"/></radialGradient>
+      <linearGradient id="ice" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c5a33" stop-opacity="0"/><stop offset=".12" stop-color="#0c5a33" stop-opacity=".45"/><stop offset=".6" stop-color="#021a0e" stop-opacity=".92"/><stop offset="1" stop-color="#000"/></linearGradient>
+      <linearGradient id="split" x1="0" y1="0" x2="1" y2="0"><stop offset=".47" stop-color="#2bff88"/><stop offset=".53" stop-color="#ff3b2f"/></linearGradient>
+      <filter id="b4"><feGaussianBlur stdDeviation="4"/></filter>
+      <filter id="b10"><feGaussianBlur stdDeviation="10"/></filter>
+      <filter id="b16"><feGaussianBlur stdDeviation="16"/></filter>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="boltGlow" x="-50%" y="-10%" width="200%" height="120%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <!-- Rauch/Nebel -->
+      <filter id="smoke" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency=".0045 .009" numOctaves="5" seed="11"/>
+        <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.6 0 0 0 -.55"/>
       </filter>
-      <filter id="noise">
-        <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7"/>
-        <feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .07 0"/>
-      </filter>
+      <mask id="smokeMask"><rect width="1123" height="1587" fill="url(#smokeFade)"/></mask>
+      <linearGradient id="smokeFade" x1="0" y1="0" x2="0" y2="1"><stop offset=".15" stop-color="#000"/><stop offset=".35" stop-color="#fff"/><stop offset=".7" stop-color="#fff"/><stop offset=".85" stop-color="#000"/></linearGradient>
+      <filter id="noise"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .07 0"/></filter>
+      <radialGradient id="vig" cx=".5" cy=".5" r=".75"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".8"/></radialGradient>
     </defs>
 
-    <!-- Lichtstrahlen von der Hallendecke -->
-    <g id="beams" style="mix-blend-mode:screen" filter="url(#blur14)"></g>
+    <!-- Teamfarben-Energie: links grün, rechts rot -->
+    <ellipse cx="250" cy="560" rx="560" ry="520" fill="url(#gGreen)"/>
+    <ellipse cx="900" cy="560" rx="520" ry="500" fill="url(#gRed)"/>
 
-    <!-- Speed-Lines vom Zentrum -->
-    <g id="speed" style="mix-blend-mode:screen"></g>
-
-    <!-- Eisfläche mit Perspektive -->
-    <rect x="0" y="930" width="1123" height="657" fill="url(#ice)"/>
-    <ellipse cx="561" cy="1010" rx="700" ry="120" fill="url(#iceShine)"/>
-    <g fill="none" stroke="#2bff88" stroke-opacity=".5" filter="url(#glow)">
-      <ellipse cx="561" cy="1330" rx="470" ry="120" stroke-width="5"/>
-      <ellipse cx="561" cy="1330" rx="16" ry="5" fill="#2bff88" fill-opacity=".6"/>
-      <line x1="-50" y1="1330" x2="1173" y2="1330" stroke-width="10" stroke-opacity=".22"/>
-    </g>
-    <!-- Bande/Horizont-Glühen -->
-    <rect x="0" y="924" width="1123" height="4" fill="#2bff88" opacity=".55" filter="url(#blur6)"/>
-    <rect x="0" y="925" width="1123" height="1.5" fill="#c9ffe0" opacity=".7"/>
-
-    <!-- Flutlichter -->
+    <!-- Lichtstrahlen + Flutlichter -->
+    <g id="beams" style="mix-blend-mode:screen" filter="url(#b16)"></g>
     <g id="lamps"></g>
 
-    <!-- Explosion hinter dem Puck -->
-    <circle cx="561" cy="745" r="330" fill="url(#burst)" style="mix-blend-mode:screen"/>
-    <g id="shards" style="mix-blend-mode:screen"></g>
+    <!-- Rauch -->
+    <g mask="url(#smokeMask)" opacity=".5" style="mix-blend-mode:screen">
+      <rect width="1123" height="1587" filter="url(#smoke)" fill="#fff"/>
+    </g>
+    <rect width="1123" height="1587" fill="url(#split)" opacity=".18" style="mix-blend-mode:multiply"/>
 
-    <!-- Puck mit Leuchtspur -->
-    <g transform="translate(561 760) rotate(-14)">
-      <path d="M -10 -40 L 520 -12 L 520 12 L -10 46 Z" fill="url(#trail)" filter="url(#blur6)" opacity=".9"/>
-      <path d="M 0 -18 L 460 -4 L 460 4 L 0 22 Z" fill="#ffffff" opacity=".8" filter="url(#blur6)"/>
-      <ellipse cx="0" cy="0" rx="150" ry="90" fill="#2bff88" opacity=".35" filter="url(#blur30)"/>
-      <!-- Zylinder -->
-      <path d="M -110 -8 L -110 34 A 110 42 0 0 0 110 34 L 110 -8 Z" fill="url(#puckSide)"/>
-      <path d="M -110 34 A 110 42 0 0 0 110 34" fill="none" stroke="#2bff88" stroke-width="2.5" opacity=".9"/>
-      <g stroke="#000" stroke-opacity=".55" stroke-width="2">
-        <line x1="-96" y1="12" x2="-96" y2="50"/><line x1="-72" y1="20" x2="-72" y2="62"/>
-        <line x1="-44" y1="24" x2="-44" y2="70"/><line x1="-14" y1="26" x2="-14" y2="74"/>
-        <line x1="16" y1="26" x2="16" y2="74"/><line x1="46" y1="24" x2="46" y2="70"/>
-        <line x1="74" y1="20" x2="74" y2="62"/><line x1="98" y1="12" x2="98" y2="50"/>
-      </g>
-      <ellipse cx="0" cy="-8" rx="110" ry="42" fill="url(#puckTop)" stroke="#9dffc8" stroke-opacity=".9" stroke-width="2.5"/>
-      <ellipse cx="0" cy="-8" rx="70" ry="26" fill="none" stroke="#2bff88" stroke-opacity=".35" stroke-width="2"/>
-      <path d="M -88 -30 A 110 42 0 0 1 40 -49" fill="none" stroke="#ffffff" stroke-opacity=".85" stroke-width="3" filter="url(#glow)"/>
+    <!-- Speed-Lines vom Kollisionspunkt -->
+    <g id="speed" style="mix-blend-mode:screen"></g>
+
+    <!-- Eisfläche -->
+    <rect x="0" y="1000" width="1123" height="587" fill="url(#ice)"/>
+    <ellipse cx="561" cy="1040" rx="720" ry="90" fill="#7dffb9" opacity=".12" filter="url(#b16)"/>
+    <g fill="none" filter="url(#glow)">
+      <ellipse cx="561" cy="1395" rx="500" ry="125" stroke="#2bff88" stroke-opacity=".35" stroke-width="5"/>
+      <line x1="-50" y1="1395" x2="561" y2="1395" stroke="#2bff88" stroke-opacity=".22" stroke-width="10"/>
+      <line x1="561" y1="1395" x2="1173" y2="1395" stroke="#ff3b2f" stroke-opacity=".22" stroke-width="10"/>
     </g>
 
-    <!-- Partikel / Eiskristalle -->
-    <g id="particles" style="mix-blend-mode:screen"></g>
+    <!-- Kollision: Kern, Blitz, Funken -->
+    <circle cx="561" cy="560" r="300" fill="url(#gCore)" style="mix-blend-mode:screen"/>
+    <g id="bolt" filter="url(#boltGlow)" style="mix-blend-mode:screen"></g>
+    <g id="sparks" style="mix-blend-mode:screen"></g>
 
-    <!-- Vignette + Korn -->
+    <g id="particles" style="mix-blend-mode:screen"></g>
     <rect width="1123" height="1587" fill="url(#vig)"/>
-    <radialGradient id="vig" cx=".5" cy=".5" r=".75">
-      <stop offset=".55" stop-color="#000" stop-opacity="0"/>
-      <stop offset="1" stop-color="#000" stop-opacity=".75"/>
-    </radialGradient>
     <rect width="1123" height="1587" filter="url(#noise)"/>
   </svg>
 
-  <div class="top"><span class="bar"></span><span>Bietigheim <b>Steelers</b> · DEL2 2026/27</span><span class="bar r"></span></div>
+  <div class="abs top"><span class="bar"></span><span>DEL2 · Saison 2026/27 · Heimspiel</span><span class="bar r"></span></div>
 
-  <div class="headline">
-    <span class="w save">SAVE</span>
-    <span class="the">THE</span>
-    <span class="w date-w">DATE</span>
+  <div class="abs headline chrome">SAVE THE DATE</div>
+
+  <img class="abs steelers" src="logos/steelers-epic.svg" alt="Bietigheim Steelers">
+  <img class="abs landshut" src="logos/landshut-epic.svg" alt="EV Landshut">
+  <div class="abs vs">VS</div>
+
+  <div class="abs date">
+    <div class="big chrome">06.12.2026</div>
+    <div class="row"><span>SONNTAG</span><span class="pill">BULLY 15:00 UHR</span></div>
   </div>
 
-  <div class="date">
-    <div class="big">06<span class="dot">.</span>12<span class="dot">.</span>2026</div>
-    <div class="time"><span>SONNTAG</span><span class="pill">15:00 UHR</span></div>
-  </div>
+  <div class="abs match"><span class="h">Bietigheim Steelers</span><span class="v">VS.</span><span class="g">EV Landshut</span></div>
 
-  <div class="match">
-    <div class="team home"><div class="sub">Bietigheim</div><div class="name">Steelers</div></div>
-    <div class="vs">VS</div>
-    <div class="team"><div class="sub">EV</div><div class="name">Landshut</div></div>
-  </div>
-
-  <div class="ticket">
+  <div class="abs ticket">
     <div class="main">
       <div class="field"><div class="k">Block</div><div class="v">A</div></div>
       <div class="field"><div class="k">Reihe</div><div class="v">1</div></div>
@@ -305,10 +180,8 @@
     <div class="stub"><div class="s1">1. Reihe!</div><div class="s2">Direkt an der Bande</div></div>
   </div>
 
-  <div class="side">Eishockey · Heimspiel · Live</div>
-  <div class="side r">#GoSteelers · Let's go</div>
-
-  <div class="footer">
+  <div class="abs footer">
+    <div class="go">#GoSteelers</div>
     <div class="arena">EgeTrans Arena</div>
     <div class="addr">Schwarzwaldstraße 40 · Bietigheim-Bissingen</div>
   </div>
@@ -324,62 +197,72 @@
     for (const k in attrs) e.setAttribute(k, attrs[k]);
     parent.appendChild(e); return e;
   };
-  const W = 1123, CX = 561, CY = 745;
+  const W = 1123, CX = 561, CY = 560;
 
-  // Lichtstrahlen
+  // Lichtstrahlen: links grün, rechts rot
   const beams = document.getElementById("beams");
-  [[-40, 30, 760, 1050, 60], [120, -20, 470, 980, 40], [300, -20, 620, 900, 26],
-   [1163, 30, 360, 1050, 60], [1003, -20, 650, 980, 40], [823, -20, 500, 900, 26],
-   [561, -60, 561, 820, 34]].forEach(([x1, y1, x2, y2, w]) => {
-    el("polygon", { points: `${x1 - w * .2},${y1} ${x1 + w * .2},${y1} ${x2 + w * 2.6},${y2} ${x2 - w * 2.6},${y2}`, fill: "url(#beam)", opacity: .85 }, beams);
-  });
+  [[-40, 20, 700, 1050, 60, "G"], [130, -20, 430, 980, 40, "G"], [300, -20, 560, 860, 24, "G"],
+   [1163, 20, 420, 1050, 60, "R"], [993, -20, 690, 980, 40, "R"], [823, -20, 560, 860, 24, "R"]]
+    .forEach(([x1, y1, x2, y2, w, c]) => el("polygon", {
+      points: `${x1 - w * .2},${y1} ${x1 + w * .2},${y1} ${x2 + w * 2.6},${y2} ${x2 - w * 2.6},${y2}`,
+      fill: `url(#beam${c})`, opacity: .85 }, beams));
 
-  // Flutlichter in zwei Bögen
+  // Flutlichter
   const lamps = document.getElementById("lamps");
-  for (const side of [-1, 1]) {
-    for (let i = 0; i < 9; i++) {
-      const t = i / 8;
-      const x = side < 0 ? 30 + t * 300 : W - 30 - t * 300;
-      const y = 60 + t * 120 + Math.sin(t * Math.PI) * -20;
-      const r = 26 - t * 12;
-      el("circle", { cx: x, cy: y, r: r * 2.4, fill: "url(#lamp)", opacity: .95 }, lamps);
-      el("circle", { cx: x, cy: y, r: r * .5, fill: "#ffffff", filter: "url(#glow)" }, lamps);
-    }
+  for (const side of [-1, 1]) for (let i = 0; i < 9; i++) {
+    const t = i / 8, x = side < 0 ? 26 + t * 290 : W - 26 - t * 290, y = 28 + t * 70, r = 24 - t * 11;
+    el("circle", { cx: x, cy: y, r: r * 2.4, fill: side < 0 ? "url(#lampG)" : "url(#lampR)", opacity: .9 }, lamps);
+    el("circle", { cx: x, cy: y, r: r * .5, fill: "#fff", filter: "url(#glow)" }, lamps);
   }
 
   // Speed-Lines
   const speed = document.getElementById("speed");
-  for (let i = 0; i < 90; i++) {
-    const a = rnd() * Math.PI * 2;
-    const r1 = 230 + rnd() * 160, r2 = r1 + 250 + rnd() * 700;
-    el("line", {
-      x1: CX + Math.cos(a) * r1, y1: CY + Math.sin(a) * r1,
-      x2: CX + Math.cos(a) * r2, y2: CY + Math.sin(a) * r2,
-      stroke: rnd() > .5 ? "#2bff88" : "#d9ffe9", "stroke-width": .6 + rnd() * 2.2,
-      "stroke-opacity": .05 + rnd() * .16, "stroke-linecap": "round"
-    }, speed);
+  for (let i = 0; i < 110; i++) {
+    const a = rnd() * Math.PI * 2, r1 = 200 + rnd() * 160, r2 = r1 + 250 + rnd() * 800;
+    const left = Math.cos(a) < 0;
+    el("line", { x1: CX + Math.cos(a) * r1, y1: CY + Math.sin(a) * r1, x2: CX + Math.cos(a) * r2, y2: CY + Math.sin(a) * r2,
+      stroke: rnd() > .45 ? (left ? "#2bff88" : "#ff5a4a") : "#ffffff", "stroke-width": .6 + rnd() * 2.2,
+      "stroke-opacity": .05 + rnd() * .17, "stroke-linecap": "round" }, speed);
   }
 
-  // Eissplitter rund um den Puck
-  const shards = document.getElementById("shards");
-  for (let i = 0; i < 70; i++) {
-    const a = rnd() * Math.PI * 2, d = 120 + rnd() * 260, len = 8 + rnd() * 34;
-    const x = CX + Math.cos(a) * d, y = CY + 15 + Math.sin(a) * d * .7;
-    const ang = a * 180 / Math.PI;
-    el("polygon", {
-      points: `0,${-len * .18} ${len},0 0,${len * .18} ${-len * .25},0`,
-      transform: `translate(${x} ${y}) rotate(${ang})`,
-      fill: rnd() > .35 ? "#e9fff4" : "#2bff88", opacity: .35 + rnd() * .6
-    }, shards);
+  // Blitz: zackige Linie von oben nach unten durch den Kollisionspunkt, plus Verästelungen
+  const bolt = document.getElementById("bolt");
+  const zig = (x, y, x2, y2, steps, amp) => {
+    const pts = [[x, y]];
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      pts.push([x + (x2 - x) * t + (rnd() - .5) * amp, y + (y2 - y) * t + (rnd() - .5) * amp * .3]);
+    }
+    pts.push([x2, y2]); return pts;
+  };
+  const draw = (pts, w, op) => {
+    const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+    el("path", { d, fill: "none", stroke: "#fffbe6", "stroke-width": w, "stroke-linejoin": "miter", "stroke-linecap": "round", opacity: op }, bolt);
+  };
+  const main = zig(600, 270, 530, 860, 16, 70);
+  draw(main, 5, 1);
+  for (let k = 0; k < 7; k++) {
+    const p = main[2 + Math.floor(rnd() * (main.length - 4))];
+    const dir = rnd() > .5 ? 1 : -1;
+    draw(zig(p[0], p[1], p[0] + dir * (60 + rnd() * 120), p[1] + 40 + rnd() * 120, 6, 40), 2, .8);
+  }
+
+  // Funken rund um VS
+  const sparks = document.getElementById("sparks");
+  for (let i = 0; i < 80; i++) {
+    const a = rnd() * Math.PI * 2, d = 70 + rnd() * 240, len = 10 + rnd() * 40;
+    const x = CX + Math.cos(a) * d, y = CY + Math.sin(a) * d * .8;
+    el("line", { x1: x, y1: y, x2: x + Math.cos(a) * len, y2: y + Math.sin(a) * len,
+      stroke: rnd() > .5 ? "#fff3c4" : "#ffd34d", "stroke-width": 1 + rnd() * 2.5, "stroke-linecap": "round", opacity: .4 + rnd() * .6 }, sparks);
   }
 
   // Partikel
   const parts = document.getElementById("particles");
   for (let i = 0; i < 420; i++) {
-    const x = rnd() * W, y = rnd() * 1587;
-    const near = Math.hypot(x - CX, y - CY) < 420;
+    const x = rnd() * W, y = rnd() * 1587, near = Math.hypot(x - CX, y - CY) < 420;
     const r = rnd() < .92 ? .6 + rnd() * 1.8 : 2.5 + rnd() * 3.5;
-    const c = el("circle", { cx: x, cy: y, r, fill: rnd() > .4 ? "#c9ffe0" : "#2bff88", opacity: (near ? .5 : .2) + rnd() * .5 }, parts);
+    const c = el("circle", { cx: x, cy: y, r, fill: rnd() > .4 ? "#e6fff1" : (x < CX ? "#2bff88" : "#ff6a5a"),
+      opacity: (near ? .5 : .2) + rnd() * .5 }, parts);
     if (r > 2.5) c.setAttribute("filter", "url(#glow)");
   }
 </script>
